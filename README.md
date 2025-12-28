@@ -1,73 +1,47 @@
-# React + TypeScript + Vite
+# Estimativa - Placar Digital
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+PWA para controle de pontuação do jogo de cartas **Estimativa**.
 
-Currently, two official plugins are available:
+## Sobre o Jogo
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Estimativa é um jogo de cartas brasileiro onde os jogadores devem prever quantas rodadas irão vencer. A habilidade está em avaliar corretamente a força da sua mão e acertar a estimativa.
 
-## React Compiler
+## Funcionalidades
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- Cadastro de 2 a 10 jogadores com posições na mesa
+- Cálculo automático de rodadas (crescente par, decrescente ímpar)
+- Coleta de estimativas na ordem correta (sentido anti-horário, começando à direita do dealer)
+- Registro de vitórias com validação automática
+- Sistema de pontuação:
+  - **Acertou**: +10 × vitórias
+  - **Zero certeiro**: +5 pontos
+  - **Errou**: -10 × diferença
+- Histórico de partidas com persistência local
+- Interface skeumórfica (mesa de feltro verde)
+- Suporte offline via PWA
 
-## Expanding the ESLint configuration
+## Stack Tecnológica
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- React 18 + TypeScript
+- Vite 7
+- Tailwind CSS v4
+- Zustand (gerenciamento de estado)
+- React Router v7
+- PWA com vite-plugin-pwa
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Instalação
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Build
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run build
 ```
+
+## Licença
+
+MIT
