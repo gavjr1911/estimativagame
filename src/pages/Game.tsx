@@ -69,11 +69,6 @@ export default function Game() {
       {/* Header com info da rodada e engrenagem */}
       <Header
         title={`Rodada ${round.number}/${game.totalRounds}`}
-        leftAction={
-          <span className="text-gold font-mono font-bold text-sm">
-            {round.cardCount}
-          </span>
-        }
         rightAction={
           <button
             onClick={() => setShowSettings(true)}
@@ -88,10 +83,21 @@ export default function Game() {
       />
 
       <main className="flex-1 p-4 space-y-4 overflow-auto pb-24">
-        {/* Info do Dealer */}
-        <div className="flex items-center justify-center gap-2 text-white/70 text-sm">
-          <span>Dealer:</span>
-          <span className="text-gold font-medium">{dealer.name}</span>
+        {/* Info do Dealer e Cartas */}
+        <div className="flex items-center justify-center gap-3 py-2">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            <span className="text-white/70 text-sm">Dealer:</span>
+            <span className="text-gold font-medium text-sm">{dealer.name}</span>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gold/10 border border-gold/30">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+            <span className="text-gold font-bold text-sm">{round.cardCount} cartas</span>
+          </div>
         </div>
 
         {/* FASE: ESTIMATIVAS */}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button, Card, Input, Logo } from '../components/ui'
+import { Button, Card, Input } from '../components/ui'
 import { PageContainer, Header } from '../components/layout'
 import { useGameStore } from '../stores'
 import { getRoundsInfo } from '../utils'
@@ -62,11 +62,6 @@ export default function NewGame() {
       />
 
       <main className="flex-1 p-4 space-y-6 overflow-auto">
-        {/* Logo pequeno */}
-        <div className="flex justify-center py-2">
-          <Logo size="sm" />
-        </div>
-
         {/* Seletor de número de jogadores */}
         <Card>
           <h2 className="text-lg font-semibold text-white mb-4">Quantos jogadores?</h2>
