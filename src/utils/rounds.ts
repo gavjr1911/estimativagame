@@ -1,6 +1,7 @@
 /**
  * Calcula o número máximo de cartas que podem ser distribuídas por jogador
  * Reservamos 1 carta para revelar o naipe curinga
+ * Limitamos a 12 cartas máximo para jogos com 2-4 jogadores (evita partidas muito longas)
  *
  * @param playerCount Número de jogadores (2-10)
  * @returns Máximo de cartas por jogador
@@ -10,7 +11,9 @@ export function calculateMaxCards(playerCount: number): number {
     throw new Error('Número de jogadores deve ser entre 2 e 10')
   }
   // 52 cartas - 1 para o curinga = 51 disponíveis
-  return Math.floor(51 / playerCount)
+  const calculated = Math.floor(51 / playerCount)
+  // Limitar a 12 cartas máximo (mesmo limite de 4 jogadores)
+  return Math.min(calculated, 12)
 }
 
 /**

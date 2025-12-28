@@ -164,7 +164,7 @@ export default function Rules() {
             </li>
           </ul>
           <p className="text-white/50 text-xs mt-3">
-            O máximo de cartas depende do número de jogadores (52 cartas ÷ jogadores - 1 para o curinga).
+            O máximo de cartas depende do número de jogadores (52 cartas ÷ jogadores - 1 para o curinga), limitado a 12 cartas.
           </p>
         </Card>
 

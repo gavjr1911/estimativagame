@@ -37,9 +37,9 @@ O jogo tem rodadas com quantidade crescente e depois decrescente de cartas:
 
 **Máximo de cartas por jogador:**
 ```
-máximo = floor(51 ÷ número_de_jogadores)
+máximo = min(floor(51 ÷ número_de_jogadores), 12)
 ```
-> Reservamos 1 carta para revelar o naipe curinga
+> Reservamos 1 carta para revelar o naipe curinga. Limitado a 12 cartas máximo.
 
 **Sequência de rodadas:**
 - **Subindo (pares):** 2, 4, 6, 8... até o máximo par ≤ máximo
@@ -49,8 +49,8 @@ máximo = floor(51 ÷ número_de_jogadores)
 
 | Jogadores | Máximo | Rodadas Subindo | Rodadas Descendo | Total |
 |-----------|--------|-----------------|------------------|-------|
-| 2 | 25 | 2,4,6,8,10,12,14,16,18,20,22,24 | 25,23,21,19,17,15,13,11,9,7,5,3,1 | 25 |
-| 3 | 17 | 2,4,6,8,10,12,14,16 | 17,15,13,11,9,7,5,3,1 | 17 |
+| 2 | 12 | 2,4,6,8,10,12 | 11,9,7,5,3,1 | 12 |
+| 3 | 12 | 2,4,6,8,10,12 | 11,9,7,5,3,1 | 12 |
 | 4 | 12 | 2,4,6,8,10,12 | 11,9,7,5,3,1 | 12 |
 | 5 | 10 | 2,4,6,8,10 | 9,7,5,3,1 | 10 |
 | 6 | 8 | 2,4,6,8 | 7,5,3,1 | 8 |
