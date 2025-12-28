@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
-import { Button } from '../components/ui'
-import { PageContainer, Header } from '../components/layout'
+import { Button, Logo } from '../components/ui'
+import { PageContainer } from '../components/layout'
 import { useGameStore } from '../stores'
 
 export default function Home() {
@@ -11,11 +11,14 @@ export default function Home() {
 
   return (
     <PageContainer>
-      <Header showLogo />
-
       <main className="flex-1 flex flex-col items-center justify-center p-6">
+        {/* Logo */}
+        <div className="mb-12 animate-fade-in">
+          <Logo size="xl" showSubtitle />
+        </div>
+
         {/* Botões de ação */}
-        <div className="w-full max-w-xs space-y-4 animate-fade-in">
+        <div className="w-full max-w-xs space-y-4 animate-fade-in" style={{ animationDelay: '0.1s' }}>
           <Button
             fullWidth
             size="lg"

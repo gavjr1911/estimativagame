@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Card, Logo } from '../components/ui'
+import { Card } from '../components/ui'
 import { PageContainer, Header } from '../components/layout'
 
 export default function Rules() {
@@ -26,11 +26,6 @@ export default function Rules() {
       />
 
       <main className="flex-1 p-4 space-y-4 overflow-auto pb-8">
-        {/* Logo */}
-        <div className="flex justify-center py-2">
-          <Logo size="sm" />
-        </div>
-
         {/* Visão Geral */}
         <Card>
           <h2 className="text-lg font-semibold text-gold mb-3">O que é Estimativa?</h2>
