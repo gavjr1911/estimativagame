@@ -1,0 +1,60 @@
+{
+  "project": {
+    "name": "Estimativa",
+    "description": "Placar digital PWA para o jogo de cartas Estimativa",
+    "type": "web-app",
+    "language": "pt-BR"
+  },
+  "context": {
+    "summary": "Aplicativo web responsivo (PWA) para controlar pontuação do jogo de cartas Estimativa. Não é o jogo em si, apenas o placar digital que automatiza cálculos e gerencia rodadas.",
+    "key_features": [
+      "Cadastro de 2-10 jogadores",
+      "Cálculo automático de rodadas (sobe pares, desce ímpares)",
+      "Coleta de estimativas na ordem correta",
+      "Registro de vitórias por rodada",
+      "Cálculo automático de pontuação",
+      "Rotação automática de dealer",
+      "Persistência offline (retoma partida)",
+      "Histórico de partidas"
+    ],
+    "scoring_rules": {
+      "hit": "+10 × vitórias (acertou estimativa)",
+      "zero_hit": "+5 pontos (estimou 0, ganhou 0)",
+      "miss": "-10 × diferença (errou estimativa)"
+    },
+    "tech_stack": {
+      "framework": "React 18+",
+      "language": "TypeScript",
+      "styling": "Tailwind CSS",
+      "state": "Zustand",
+      "build": "Vite",
+      "pwa": "vite-plugin-pwa",
+      "storage": "localStorage + IndexedDB"
+    },
+    "design": {
+      "style": "Skeumorfismo",
+      "theme": "Mesa de cartas (feltro verde, fichas de poker)",
+      "responsive": "Mobile-first"
+    }
+  },
+  "documentation": {
+    "prd": "DOCS/PRD.md",
+    "game_rules": "DOCS/GAME_RULES.md",
+    "architecture": "DOCS/ARCHITECTURE.md",
+    "ui_ux": "DOCS/UI_UX.md",
+    "development_plan": "DOCS/DEVELOPMENT_PLAN.md"
+  },
+  "conventions": {
+    "components": "PascalCase, um componente por arquivo",
+    "hooks": "camelCase com prefixo 'use'",
+    "stores": "camelCase com sufixo 'Store'",
+    "types": "PascalCase, interfaces preferidas",
+    "files": "kebab-case para pastas, PascalCase para componentes"
+  },
+  "important_rules": {
+    "round_calculation": "max_cards = floor(51 / players), sobe pares até max, desce ímpares até 1",
+    "estimate_order": "Começa pela direita do dealer, sentido anti-horário",
+    "dealer_rotation": "Quem estimou primeiro vira próximo dealer",
+    "validation": "Estimativa: 0 até N cartas. Soma vitórias = N cartas."
+  }
+}
