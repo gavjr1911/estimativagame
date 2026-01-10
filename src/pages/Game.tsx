@@ -5,12 +5,14 @@ import { PageContainer, Header } from '../components/layout'
 import { ShareModal, SyncStatus, ViewerBadge } from '../components/sync'
 import { useGameStore, useSyncStore } from '../stores'
 import { useRealtimeGame, useSupabaseStatus } from '../hooks'
+import type { EndReason } from '../hooks/useRealtimeGame'
 
 export default function Game() {
   const navigate = useNavigate()
   const [showSettings, setShowSettings] = useState(false)
   const [showConfirmDelete, setShowConfirmDelete] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
+  const [showEndedModal, setShowEndedModal] = useState<EndReason>(null)
 
   const { role, leaveGame } = useSyncStore()
   const { isConfigured } = useSupabaseStatus()
@@ -18,7 +20,14 @@ export default function Game() {
   const isHost = role === 'host'
 
   // Ativar realtime sync
-  useRealtimeGame()
+  const { endReason, clearEndReason } = useRealtimeGame()
+
+  // Detectar quando o host encerra o jogo ou para o compartilhamento
+  useEffect(() => {
+    if (endReason) {
+      setShowEndedModal(endReason)
+    }
+  }, [endReason])
 
   const {
     game,
@@ -68,7 +77,11 @@ export default function Game() {
     }
   }
 
-  const handleDeleteGame = () => {
+  const handleDeleteGame = async () => {
+    // Se está compartilhando, notificar viewers que o jogo foi encerrado
+    if (isHost) {
+      await leaveGame()
+    }
     resetGame()
     navigate('/')
   }
@@ -443,6 +456,83 @@ export default function Game() {
         isOpen={showShareModal}
         onClose={() => setShowShareModal(false)}
       />
+
+      {/* Modal de Transmissão Encerrada (para viewers) */}
+      <Modal
+        isOpen={showEndedModal !== null}
+        onClose={() => {
+          setShowEndedModal(null)
+          clearEndReason()
+        }}
+        title={showEndedModal === 'game_interrupted' ? 'Partida Interrompida' : 'Transmissão Encerrada'}
+      >
+        <div className="text-center py-2">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white/5 flex items-center justify-center">
+            {showEndedModal === 'game_interrupted' ? (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414" />
+              </svg>
+            )}
+          </div>
+
+          {showEndedModal === 'game_interrupted' ? (
+            <>
+              <p className="text-white/70 mb-2">
+                O anfitrião interrompeu a partida
+              </p>
+              <p className="text-sm text-white/50 mb-6">
+                A partida foi encerrada e não pode mais ser continuada.
+              </p>
+              <Button
+                fullWidth
+                onClick={() => {
+                  setShowEndedModal(null)
+                  clearEndReason()
+                  resetGame()
+                  navigate('/')
+                }}
+              >
+                Voltar ao Início
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="text-white/70 mb-2">
+                O anfitrião parou o compartilhamento
+              </p>
+              <p className="text-sm text-white/50 mb-6">
+                Você não receberá mais atualizações, mas pode continuar a partida no seu dispositivo.
+              </p>
+              <div className="space-y-3">
+                <Button
+                  fullWidth
+                  onClick={() => {
+                    setShowEndedModal(null)
+                    clearEndReason()
+                  }}
+                >
+                  Continuar no Meu Dispositivo
+                </Button>
+                <button
+                  onClick={() => {
+                    setShowEndedModal(null)
+                    clearEndReason()
+                    resetGame()
+                    navigate('/')
+                  }}
+                  className="w-full py-2 text-white/50 hover:text-white text-sm transition-colors"
+                >
+                  Encerrar e Voltar ao Início
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </Modal>
     </PageContainer>
   )
 }

@@ -1,17 +1,27 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { useSyncStore, useGameStore } from '../stores'
 import type { Game } from '../types'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 
+// Tipo de encerramento
+export type EndReason = 'share_stopped' | 'game_interrupted' | null
+
 /**
  * Hook para sincronização em tempo real do jogo
  * - Viewers recebem atualizações do host
  * - Reconecta automaticamente se perder conexão
+ * - Notifica quando o jogo é encerrado pelo host
  */
 export function useRealtimeGame() {
-  const { code, role, status, setStatus, updateViewerCount } = useSyncStore()
+  const { code, role, status, setStatus, updateViewerCount, reset } = useSyncStore()
   const channelRef = useRef<RealtimeChannel | null>(null)
+  const [endReason, setEndReason] = useState<EndReason>(null)
+
+  // Resetar endReason quando mudar de código
+  useEffect(() => {
+    setEndReason(null)
+  }, [code])
 
   useEffect(() => {
     // Não fazer nada se não estiver conectado ou sem código
@@ -45,16 +55,26 @@ export function useRealtimeGame() {
             useGameStore.setState({ game: newData.game_data })
           }
 
-          // Se jogo foi finalizado pelo host, atualizar status
-          if (newData.status === 'finished') {
+          // Se jogo foi finalizado pelo host, notificar viewers
+          if (newData.status === 'finished' && role === 'viewer') {
+            // Verificar se o jogo em si foi interrompido ou apenas o compartilhamento
+            const gameWasInterrupted = newData.game_data?.status === 'finished' || !newData.game_data
+
+            if (gameWasInterrupted) {
+              setEndReason('game_interrupted')
+            } else {
+              setEndReason('share_stopped')
+            }
+
             setStatus('disconnected')
+            reset()
           }
         }
       )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
+      .subscribe((subscribeStatus) => {
+        if (subscribeStatus === 'SUBSCRIBED') {
           console.log('Realtime connected')
-        } else if (status === 'CHANNEL_ERROR') {
+        } else if (subscribeStatus === 'CHANNEL_ERROR') {
           console.error('Realtime channel error')
           setStatus('error')
         }
@@ -69,7 +89,7 @@ export function useRealtimeGame() {
         channelRef.current = null
       }
     }
-  }, [code, role, status, setStatus, updateViewerCount])
+  }, [code, role, status, setStatus, updateViewerCount, reset])
 
   // Função para forçar reconexão
   const reconnect = async () => {
@@ -87,7 +107,12 @@ export function useRealtimeGame() {
     setStatus('connected')
   }
 
-  return { reconnect }
+  // Função para limpar o estado de jogo encerrado
+  const clearEndReason = useCallback(() => {
+    setEndReason(null)
+  }, [])
+
+  return { reconnect, endReason, clearEndReason }
 }
 
 /**
