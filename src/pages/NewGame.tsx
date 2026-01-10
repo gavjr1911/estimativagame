@@ -33,8 +33,10 @@ export default function NewGame() {
 
   // Calcular preview da ordem de estimativa
   const getOrderPreview = () => {
-    if (!allNamesFilled) return []
-    const tempPlayers = playerNames.map((name, index) => createPlayer(name, index + 1))
+    const tempPlayers = playerNames.map((name, index) => ({
+      ...createPlayer(name.trim() || `Jogador ${index + 1}`, index + 1),
+      name: name.trim() || `Jogador ${index + 1}`,
+    }))
     return getEstimateOrder(tempPlayers, firstDealer, direction)
   }
 
@@ -160,49 +162,43 @@ export default function NewGame() {
         {/* Sentido do jogo */}
         <Card>
           <h2 className="text-lg font-semibold text-white mb-4">Sentido do jogo</h2>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setDirection('clockwise')}
-              className={`flex-1 flex flex-col items-center gap-2 p-4 rounded-xl transition-all ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
                 direction === 'clockwise'
-                  ? 'bg-gold/20 border-2 border-gold'
-                  : 'bg-white/5 border-2 border-transparent hover:bg-white/10'
+                  ? 'bg-gold text-felt-dark'
+                  : 'bg-white/10 text-white hover:bg-white/20'
               }`}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className={`h-8 w-8 ${direction === 'clockwise' ? 'text-gold' : 'text-white/70'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-              <span className={`font-medium ${direction === 'clockwise' ? 'text-gold' : 'text-white/70'}`}>
-                Horário
-              </span>
+              Horário
             </button>
 
             <button
               onClick={() => setDirection('counterclockwise')}
-              className={`flex-1 flex flex-col items-center gap-2 p-4 rounded-xl transition-all ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
                 direction === 'counterclockwise'
-                  ? 'bg-gold/20 border-2 border-gold'
-                  : 'bg-white/5 border-2 border-transparent hover:bg-white/10'
+                  ? 'bg-gold text-felt-dark'
+                  : 'bg-white/10 text-white hover:bg-white/20'
               }`}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className={`h-8 w-8 transform scale-x-[-1] ${direction === 'counterclockwise' ? 'text-gold' : 'text-white/70'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 transform scale-x-[-1]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-              <span className={`font-medium ${direction === 'counterclockwise' ? 'text-gold' : 'text-white/70'}`}>
-                Anti-horário
-              </span>
+              Anti-horário
             </button>
           </div>
 
           {/* Preview da ordem */}
-          {allNamesFilled && orderPreview.length > 0 && (
-            <div className="mt-4 p-3 bg-white/5 rounded-lg">
-              <p className="text-xs text-white/50 mb-2">Ordem de estimativa:</p>
-              <p className="text-sm text-white/80">
-                {orderPreview.map(p => p.name).join(' → ')}
-              </p>
-            </div>
-          )}
+          <div className="mt-4 p-3 bg-white/5 rounded-lg">
+            <p className="text-xs text-white/50 mb-2">Ordem de estimativa:</p>
+            <p className="text-sm text-white/80">
+              {orderPreview.map(p => p.name).join(' → ')}
+            </p>
+          </div>
         </Card>
 
         {/* Espaço para o botão fixo */}
