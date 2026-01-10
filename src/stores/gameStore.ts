@@ -26,6 +26,7 @@ interface GameState {
   // Actions - Estimativas
   setEstimate: (playerId: string, estimate: number) => void
   confirmEstimates: () => void
+  backToEstimates: () => void
 
   // Actions - Resultados
   setWins: (playerId: string, wins: number) => void
@@ -99,6 +100,22 @@ export const useGameStore = create<GameState>()(
         }))
 
         const updatedRound = { ...round, status: 'playing' as const, players: updatedPlayers }
+        const updatedRounds = game.rounds.map((r, i) =>
+          i === game.currentRoundIndex ? updatedRound : r
+        )
+
+        set({ game: { ...game, rounds: updatedRounds } })
+      },
+
+      backToEstimates: () => {
+        const { game } = get()
+        if (!game) return
+
+        const round = getCurrentRound(game)
+        if (round.status !== 'playing') return
+
+        // Voltar para o estado de estimativas, mantendo as estimativas atuais
+        const updatedRound = { ...round, status: 'estimating' as const }
         const updatedRounds = game.rounds.map((r, i) =>
           i === game.currentRoundIndex ? updatedRound : r
         )
