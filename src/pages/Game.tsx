@@ -2,12 +2,23 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Card, NumberSelector, Counter, Modal } from '../components/ui'
 import { PageContainer, Header } from '../components/layout'
-import { useGameStore } from '../stores'
+import { ShareModal, SyncStatus, ViewerBadge } from '../components/sync'
+import { useGameStore, useSyncStore } from '../stores'
+import { useRealtimeGame, useSupabaseStatus } from '../hooks'
 
 export default function Game() {
   const navigate = useNavigate()
   const [showSettings, setShowSettings] = useState(false)
   const [showConfirmDelete, setShowConfirmDelete] = useState(false)
+  const [showShareModal, setShowShareModal] = useState(false)
+
+  const { role, leaveGame } = useSyncStore()
+  const { isConfigured } = useSupabaseStatus()
+  const isViewer = role === 'viewer'
+  const isHost = role === 'host'
+
+  // Ativar realtime sync
+  useRealtimeGame()
 
   const {
     game,
@@ -70,17 +81,26 @@ export default function Game() {
       <Header
         title={`Rodada ${round.number}/${game.totalRounds}`}
         rightAction={
-          <button
-            onClick={() => setShowSettings(true)}
-            className="text-white/70 hover:text-white transition-colors p-1"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Status de sincronização */}
+            {isConfigured && (isHost || isViewer) && (
+              <SyncStatus />
+            )}
+            <button
+              onClick={() => setShowSettings(true)}
+              className="text-white/70 hover:text-white transition-colors p-1"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
+          </div>
         }
       />
+
+      {/* Banner de modo visualização */}
+      {isViewer && <ViewerBadge />}
 
       <main className="flex-1 p-4 space-y-4 overflow-auto pb-24">
         {/* Info do Dealer e Cartas */}
@@ -142,6 +162,7 @@ export default function Game() {
                         max={round.cardCount}
                         value={roundData?.estimate ?? null}
                         onChange={(value) => setEstimate(player.id, value)}
+                        disabled={isViewer}
                       />
                     </div>
                   )
@@ -150,16 +171,18 @@ export default function Game() {
             </Card>
 
             {/* Botão confirmar */}
-            <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-felt-dark via-felt-dark to-transparent">
-              <Button
-                fullWidth
-                size="lg"
-                onClick={confirmEstimates}
-                disabled={!canConfirmEstimates()}
-              >
-                Confirmar Estimativas
-              </Button>
-            </div>
+            {!isViewer && (
+              <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-felt-dark via-felt-dark to-transparent">
+                <Button
+                  fullWidth
+                  size="lg"
+                  onClick={confirmEstimates}
+                  disabled={!canConfirmEstimates()}
+                >
+                  Confirmar Estimativas
+                </Button>
+              </div>
+            )}
           </>
         )}
 
@@ -195,6 +218,7 @@ export default function Game() {
                         max={round.cardCount}
                         onChange={(value) => setWins(player.id, value)}
                         label="Vitórias"
+                        disabled={isViewer}
                       />
                     </div>
                   )
@@ -221,16 +245,18 @@ export default function Game() {
             </Card>
 
             {/* Botão calcular pontos */}
-            <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-felt-dark via-felt-dark to-transparent">
-              <Button
-                fullWidth
-                size="lg"
-                onClick={finishRound}
-                disabled={!canFinishRound()}
-              >
-                Calcular Pontos
-              </Button>
-            </div>
+            {!isViewer && (
+              <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-felt-dark via-felt-dark to-transparent">
+                <Button
+                  fullWidth
+                  size="lg"
+                  onClick={finishRound}
+                  disabled={!canFinishRound()}
+                >
+                  Calcular Pontos
+                </Button>
+              </div>
+            )}
           </>
         )}
 
@@ -304,15 +330,17 @@ export default function Game() {
             </Card>
 
             {/* Botão próxima rodada */}
-            <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-felt-dark via-felt-dark to-transparent">
-              <Button
-                fullWidth
-                size="lg"
-                onClick={handleNextRound}
-              >
-                {isLastRound ? 'Ver Resultado Final' : 'Próxima Rodada →'}
-              </Button>
-            </div>
+            {!isViewer && (
+              <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-felt-dark via-felt-dark to-transparent">
+                <Button
+                  fullWidth
+                  size="lg"
+                  onClick={handleNextRound}
+                >
+                  {isLastRound ? 'Ver Resultado Final' : 'Próxima Rodada →'}
+                </Button>
+              </div>
+            )}
           </>
         )}
       </main>
@@ -324,18 +352,53 @@ export default function Game() {
         title="Configurações"
       >
         <div className="space-y-3">
-          <button
-            onClick={() => {
-              setShowSettings(false)
-              setShowConfirmDelete(true)
-            }}
-            className="w-full flex items-center gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-            <span className="font-medium">Interromper Partida</span>
-          </button>
+          {/* Botão de compartilhar (apenas host e quando Supabase configurado) */}
+          {isConfigured && !isViewer && (
+            <button
+              onClick={() => {
+                setShowSettings(false)
+                setShowShareModal(true)
+              }}
+              className="w-full flex items-center gap-3 p-4 rounded-xl bg-gold/10 border border-gold/30 text-gold hover:bg-gold/20 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+              </svg>
+              <span className="font-medium">Compartilhar Partida</span>
+            </button>
+          )}
+
+          {/* Botão sair da partida (viewer) */}
+          {isViewer && (
+            <button
+              onClick={async () => {
+                await leaveGame()
+                navigate('/')
+              }}
+              className="w-full flex items-center gap-3 p-4 rounded-xl bg-white/10 border border-white/20 text-white hover:bg-white/20 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              <span className="font-medium">Sair da Partida</span>
+            </button>
+          )}
+
+          {/* Botão interromper (host) */}
+          {!isViewer && (
+            <button
+              onClick={() => {
+                setShowSettings(false)
+                setShowConfirmDelete(true)
+              }}
+              className="w-full flex items-center gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              <span className="font-medium">Interromper Partida</span>
+            </button>
+          )}
 
           <button
             onClick={() => setShowSettings(false)}
@@ -374,6 +437,12 @@ export default function Game() {
           </Button>
         </div>
       </Modal>
+
+      {/* Modal de Compartilhamento */}
+      <ShareModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+      />
     </PageContainer>
   )
 }

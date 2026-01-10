@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, subscribeWithSelector } from 'zustand/middleware'
 import type { Game, Player, Round, RoundPlayer, GameDirection } from '../types'
 import {
   createGame as createGameUtil,
@@ -45,8 +45,9 @@ interface GameState {
 }
 
 export const useGameStore = create<GameState>()(
-  persist(
-    (set, get) => ({
+  subscribeWithSelector(
+    persist(
+      (set, get) => ({
       game: null,
 
       // ========== SETUP ==========
@@ -262,9 +263,29 @@ export const useGameStore = create<GameState>()(
           difference,
         }
       },
-    }),
-    {
-      name: 'estimativa-game',
-    }
+      }),
+      {
+        name: 'estimativa-game',
+      }
+    )
   )
 )
+
+// Subscriber para sincronização automática
+// Quando o game mudar e houver compartilhamento ativo, sincroniza
+if (typeof window !== 'undefined') {
+  useGameStore.subscribe(
+    (state) => state.game,
+    (game) => {
+      if (game) {
+        // Import dinâmico para evitar dependência circular
+        import('./syncStore').then(({ useSyncStore }) => {
+          const { role, syncGameState } = useSyncStore.getState()
+          if (role === 'host') {
+            syncGameState(game)
+          }
+        })
+      }
+    }
+  )
+}
