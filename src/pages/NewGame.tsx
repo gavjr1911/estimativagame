@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { Button, Card, Input } from '../components/ui'
 import { PageContainer, Header } from '../components/layout'
 import { useGameStore } from '../stores'
-import { getRoundsInfo } from '../utils'
+import { getRoundsInfo, getEstimateOrder, createPlayer } from '../utils'
+import type { GameDirection } from '../types'
 
 export default function NewGame() {
   const navigate = useNavigate()
@@ -12,6 +13,7 @@ export default function NewGame() {
   const [playerCount, setPlayerCount] = useState(4)
   const [playerNames, setPlayerNames] = useState<string[]>(['', '', '', ''])
   const [firstDealer, setFirstDealer] = useState(1)
+  const [direction, setDirection] = useState<GameDirection>('clockwise')
 
   // Atualizar array de nomes quando muda o número de jogadores
   useEffect(() => {
@@ -29,6 +31,15 @@ export default function NewGame() {
   const roundsInfo = getRoundsInfo(playerCount)
   const allNamesFilled = playerNames.every(n => n.trim().length > 0)
 
+  // Calcular preview da ordem de estimativa
+  const getOrderPreview = () => {
+    if (!allNamesFilled) return []
+    const tempPlayers = playerNames.map((name, index) => createPlayer(name, index + 1))
+    return getEstimateOrder(tempPlayers, firstDealer, direction)
+  }
+
+  const orderPreview = getOrderPreview()
+
   const handleStartGame = () => {
     if (!allNamesFilled) return
 
@@ -37,7 +48,7 @@ export default function NewGame() {
       resetGame()
     }
 
-    createGame(playerNames, firstDealer)
+    createGame(playerNames, firstDealer, direction)
     navigate('/jogo')
   }
 
@@ -144,6 +155,54 @@ export default function NewGame() {
               </button>
             ))}
           </div>
+        </Card>
+
+        {/* Sentido do jogo */}
+        <Card>
+          <h2 className="text-lg font-semibold text-white mb-4">Sentido do jogo</h2>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setDirection('clockwise')}
+              className={`flex-1 flex flex-col items-center gap-2 p-4 rounded-xl transition-all ${
+                direction === 'clockwise'
+                  ? 'bg-gold/20 border-2 border-gold'
+                  : 'bg-white/5 border-2 border-transparent hover:bg-white/10'
+              }`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className={`h-8 w-8 ${direction === 'clockwise' ? 'text-gold' : 'text-white/70'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span className={`font-medium ${direction === 'clockwise' ? 'text-gold' : 'text-white/70'}`}>
+                Horário
+              </span>
+            </button>
+
+            <button
+              onClick={() => setDirection('counterclockwise')}
+              className={`flex-1 flex flex-col items-center gap-2 p-4 rounded-xl transition-all ${
+                direction === 'counterclockwise'
+                  ? 'bg-gold/20 border-2 border-gold'
+                  : 'bg-white/5 border-2 border-transparent hover:bg-white/10'
+              }`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className={`h-8 w-8 transform scale-x-[-1] ${direction === 'counterclockwise' ? 'text-gold' : 'text-white/70'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span className={`font-medium ${direction === 'counterclockwise' ? 'text-gold' : 'text-white/70'}`}>
+                Anti-horário
+              </span>
+            </button>
+          </div>
+
+          {/* Preview da ordem */}
+          {allNamesFilled && orderPreview.length > 0 && (
+            <div className="mt-4 p-3 bg-white/5 rounded-lg">
+              <p className="text-xs text-white/50 mb-2">Ordem de estimativa:</p>
+              <p className="text-sm text-white/80">
+                {orderPreview.map(p => p.name).join(' → ')}
+              </p>
+            </div>
+          )}
         </Card>
 
         {/* Espaço para o botão fixo */}

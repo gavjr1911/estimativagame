@@ -1,4 +1,4 @@
-import type { Player } from '../types'
+import type { Player, GameDirection } from '../types'
 
 /**
  * Gera um ID único para um jogador
@@ -24,21 +24,24 @@ export function createPlayer(name: string, position: number): Player {
 }
 
 /**
- * Retorna a ordem de estimativa baseada na posição do dealer
- *
- * A estimativa começa pelo jogador à DIREITA do dealer e segue
- * no sentido ANTI-HORÁRIO (posições decrescentes, com wrap-around)
+ * Retorna a ordem de estimativa baseada na posição do dealer e sentido do jogo
  *
  * @param players Lista de jogadores ordenada por posição
  * @param dealerPosition Posição do dealer na mesa
+ * @param direction Sentido do jogo (clockwise ou counterclockwise)
  * @returns Jogadores na ordem de estimativa
  *
  * @example
  * // 4 jogadores nas posições 1, 2, 3, 4
- * // Dealer na posição 3
- * // Ordem: 2, 1, 4, 3 (começa à direita do dealer, sentido anti-horário)
+ * // Dealer na posição 2
+ * // Sentido horário: 3, 4, 1, 2 (próxima posição)
+ * // Sentido anti-horário: 1, 4, 3, 2 (posição anterior)
  */
-export function getEstimateOrder(players: Player[], dealerPosition: number): Player[] {
+export function getEstimateOrder(
+  players: Player[],
+  dealerPosition: number,
+  direction: GameDirection = 'counterclockwise'
+): Player[] {
   const sorted = [...players].sort((a, b) => a.position - b.position)
   const dealerIndex = sorted.findIndex(p => p.position === dealerPosition)
 
@@ -48,10 +51,15 @@ export function getEstimateOrder(players: Player[], dealerPosition: number): Pla
 
   const result: Player[] = []
 
-  // Começa pela direita do dealer (posição anterior) e vai no sentido anti-horário
   for (let i = 1; i <= sorted.length; i++) {
-    // Posição anterior ao dealer (anti-horário)
-    const index = (dealerIndex - i + sorted.length) % sorted.length
+    let index: number
+    if (direction === 'clockwise') {
+      // Sentido horário: próxima posição (índice crescente)
+      index = (dealerIndex + i) % sorted.length
+    } else {
+      // Sentido anti-horário: posição anterior (índice decrescente)
+      index = (dealerIndex - i + sorted.length) % sorted.length
+    }
     result.push(sorted[index])
   }
 
@@ -63,10 +71,15 @@ export function getEstimateOrder(players: Player[], dealerPosition: number): Pla
  *
  * @param players Lista de jogadores
  * @param currentDealerPosition Posição do dealer atual
+ * @param direction Sentido do jogo
  * @returns Player que será o próximo dealer
  */
-export function getNextDealer(players: Player[], currentDealerPosition: number): Player {
-  const estimateOrder = getEstimateOrder(players, currentDealerPosition)
+export function getNextDealer(
+  players: Player[],
+  currentDealerPosition: number,
+  direction: GameDirection = 'counterclockwise'
+): Player {
+  const estimateOrder = getEstimateOrder(players, currentDealerPosition, direction)
   // O primeiro a estimar vira o próximo dealer
   return estimateOrder[0]
 }

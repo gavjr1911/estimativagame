@@ -1,4 +1,9 @@
 /**
+ * Sentido do jogo (direção da ordem de estimativas e rotação do dealer)
+ */
+export type GameDirection = 'clockwise' | 'counterclockwise'
+
+/**
  * Jogador
  */
 export interface Player {
@@ -52,6 +57,7 @@ export interface Game {
   currentRoundIndex: number
   totalRounds: number
   roundSequence: number[] // Sequência de cartas por rodada [2, 4, 6, 8, 7, 5, 3, 1]
+  direction: GameDirection // Sentido do jogo (horário ou anti-horário)
 }
 
 /**

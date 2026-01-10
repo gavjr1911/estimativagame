@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Game, Player, Round, RoundPlayer } from '../types'
+import type { Game, Player, Round, RoundPlayer, GameDirection } from '../types'
 import {
   createGame as createGameUtil,
   getCurrentRound,
@@ -20,7 +20,7 @@ interface GameState {
   game: Game | null
 
   // Actions - Setup
-  createGame: (playerNames: string[], firstDealerPosition: number) => void
+  createGame: (playerNames: string[], firstDealerPosition: number, direction: GameDirection) => void
   resetGame: () => void
 
   // Actions - Estimativas
@@ -51,8 +51,8 @@ export const useGameStore = create<GameState>()(
 
       // ========== SETUP ==========
 
-      createGame: (playerNames, firstDealerPosition) => {
-        const game = createGameUtil(playerNames, firstDealerPosition)
+      createGame: (playerNames, firstDealerPosition, direction) => {
+        const game = createGameUtil(playerNames, firstDealerPosition, direction)
         set({ game })
       },
 
@@ -226,7 +226,7 @@ export const useGameStore = create<GameState>()(
         if (!game) return []
 
         const dealer = getCurrentDealer(game)
-        return getEstimateOrder(game.players, dealer.position)
+        return getEstimateOrder(game.players, dealer.position, game.direction)
       },
 
       canConfirmEstimates: () => {

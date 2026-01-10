@@ -1,4 +1,4 @@
-import type { Game, Round, RoundPlayer, Player, GameHistory } from '../types'
+import type { Game, Round, RoundPlayer, Player, GameHistory, GameDirection } from '../types'
 import { generateRoundSequence } from './rounds'
 import { createPlayer, getNextDealer, sortPlayersByScore, getWinners } from './players'
 
@@ -14,9 +14,14 @@ export function generateGameId(): string {
  *
  * @param playerNames Nomes dos jogadores na ordem das posições
  * @param firstDealerPosition Posição do primeiro dealer (1-based)
+ * @param direction Sentido do jogo (clockwise ou counterclockwise)
  * @returns Objeto Game pronto para iniciar
  */
-export function createGame(playerNames: string[], firstDealerPosition: number): Game {
+export function createGame(
+  playerNames: string[],
+  firstDealerPosition: number,
+  direction: GameDirection = 'counterclockwise'
+): Game {
   if (playerNames.length < 2 || playerNames.length > 10) {
     throw new Error('Número de jogadores deve ser entre 2 e 10')
   }
@@ -47,6 +52,7 @@ export function createGame(playerNames: string[], firstDealerPosition: number): 
     currentRoundIndex: 0,
     totalRounds: roundSequence.length,
     roundSequence,
+    direction,
   }
 }
 
@@ -164,7 +170,7 @@ export function createNextRound(game: Game): Round {
   }
 
   const currentDealer = game.players.find(p => p.id === currentRound.dealerId)!
-  const nextDealer = getNextDealer(game.players, currentDealer.position)
+  const nextDealer = getNextDealer(game.players, currentDealer.position, game.direction)
 
   return createRound(
     nextRoundIndex + 1,
