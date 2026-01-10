@@ -39,3 +39,12 @@ export {
   gameToHistory,
   createNextRound,
 } from './game'
+
+// Sync
+export {
+  getDeviceId,
+  generateShareCode,
+  normalizeCode,
+  isValidCode,
+  formatCodeForDisplay,
+} from './sync'
