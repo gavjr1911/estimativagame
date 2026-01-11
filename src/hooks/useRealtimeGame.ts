@@ -7,6 +7,11 @@ import type { RealtimeChannel } from '@supabase/supabase-js'
 // Tipo de encerramento
 export type EndReason = 'share_stopped' | 'game_interrupted' | null
 
+// Constantes de reconexão
+const RECONNECT_DELAY_MS = 2000
+const MAX_RECONNECT_ATTEMPTS = 10
+const HEARTBEAT_INTERVAL_MS = 30000
+
 /**
  * Hook para sincronização em tempo real do jogo
  * - Viewers recebem atualizações do host
@@ -16,6 +21,10 @@ export type EndReason = 'share_stopped' | 'game_interrupted' | null
 export function useRealtimeGame() {
   const { code, role, status, setStatus, updateViewerCount, reset } = useSyncStore()
   const channelRef = useRef<RealtimeChannel | null>(null)
+  const reconnectAttemptsRef = useRef(0)
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const heartbeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const isReconnectingRef = useRef(false)
   const [endReason, setEndReason] = useState<EndReason>(null)
 
   // Resetar endReason quando mudar de código
@@ -23,15 +32,43 @@ export function useRealtimeGame() {
     setEndReason(null)
   }, [code])
 
-  useEffect(() => {
-    // Não fazer nada se não estiver conectado ou sem código
-    if (!isSupabaseConfigured || !supabase || !code || status !== 'connected') {
+  // Função para limpar recursos
+  const cleanup = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
+      reconnectTimeoutRef.current = null
+    }
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current)
+      heartbeatIntervalRef.current = null
+    }
+    if (channelRef.current && supabase) {
+      supabase.removeChannel(channelRef.current)
+      channelRef.current = null
+    }
+    isReconnectingRef.current = false
+  }, [])
+
+  // Função para criar e conectar o channel
+  const createChannel = useCallback(() => {
+    if (!isSupabaseConfigured || !supabase || !code || role === 'none') {
       return
     }
 
-    // Criar channel para escutar mudanças
+    // Limpar channel anterior se existir
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current)
+      channelRef.current = null
+    }
+
+    console.log('[Realtime] Creating channel for code:', code)
+
     const channel = supabase
-      .channel(`game:${code}`)
+      .channel(`game:${code}`, {
+        config: {
+          presence: { key: code },
+        },
+      })
       .on(
         'postgres_changes',
         {
@@ -57,8 +94,8 @@ export function useRealtimeGame() {
 
           // Se jogo foi finalizado pelo host, notificar viewers
           if (newData.status === 'finished' && role === 'viewer') {
-            // Verificar se o jogo em si foi interrompido ou apenas o compartilhamento
-            const gameWasInterrupted = newData.game_data?.status === 'finished' || !newData.game_data
+            const gameWasInterrupted =
+              newData.game_data?.status === 'finished' || !newData.game_data
 
             if (gameWasInterrupted) {
               setEndReason('game_interrupted')
@@ -66,46 +103,156 @@ export function useRealtimeGame() {
               setEndReason('share_stopped')
             }
 
+            cleanup()
             setStatus('disconnected')
             reset()
           }
         }
       )
-      .subscribe((subscribeStatus) => {
-        if (subscribeStatus === 'SUBSCRIBED') {
-          console.log('Realtime connected')
-        } else if (subscribeStatus === 'CHANNEL_ERROR') {
-          console.error('Realtime channel error')
-          setStatus('error')
+      .subscribe((subscribeStatus, err) => {
+        console.log('[Realtime] Subscribe status:', subscribeStatus, err)
+
+        switch (subscribeStatus) {
+          case 'SUBSCRIBED':
+            console.log('[Realtime] Connected successfully')
+            setStatus('connected')
+            reconnectAttemptsRef.current = 0
+            isReconnectingRef.current = false
+            break
+
+          case 'CHANNEL_ERROR':
+          case 'TIMED_OUT':
+          case 'CLOSED':
+            console.warn('[Realtime] Connection lost:', subscribeStatus)
+            if (!isReconnectingRef.current) {
+              setStatus('error')
+              scheduleReconnect()
+            }
+            break
         }
       })
 
     channelRef.current = channel
+  }, [code, role, setStatus, updateViewerCount, reset, cleanup])
 
-    // Cleanup ao desmontar ou mudar código
-    return () => {
-      if (channelRef.current && supabase) {
-        supabase.removeChannel(channelRef.current)
-        channelRef.current = null
-      }
+  // Função para agendar reconexão
+  const scheduleReconnect = useCallback(() => {
+    if (isReconnectingRef.current) return
+    if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+      console.error('[Realtime] Max reconnect attempts reached')
+      setStatus('error')
+      return
     }
-  }, [code, role, status, setStatus, updateViewerCount, reset])
 
-  // Função para forçar reconexão
-  const reconnect = async () => {
-    if (!code) return
-
+    isReconnectingRef.current = true
+    reconnectAttemptsRef.current++
     setStatus('connecting')
 
-    // Remover channel antigo
-    if (channelRef.current && supabase) {
-      await supabase.removeChannel(channelRef.current)
-      channelRef.current = null
+    const delay = RECONNECT_DELAY_MS * Math.min(reconnectAttemptsRef.current, 5)
+    console.log(
+      `[Realtime] Scheduling reconnect attempt ${reconnectAttemptsRef.current} in ${delay}ms`
+    )
+
+    reconnectTimeoutRef.current = setTimeout(() => {
+      console.log('[Realtime] Attempting to reconnect...')
+      createChannel()
+    }, delay)
+  }, [createChannel, setStatus])
+
+  // Função para reconexão manual
+  const reconnect = useCallback(async () => {
+    if (!code || role === 'none') return
+
+    console.log('[Realtime] Manual reconnect requested')
+    reconnectAttemptsRef.current = 0
+    isReconnectingRef.current = false
+
+    cleanup()
+    setStatus('connecting')
+
+    // Pequeno delay para garantir cleanup
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    createChannel()
+  }, [code, role, cleanup, createChannel, setStatus])
+
+  // Efeito principal - criar channel quando tiver código e role
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase || !code || role === 'none') {
+      cleanup()
+      return
     }
 
-    // O useEffect vai recriar o channel
-    setStatus('connected')
-  }
+    // Criar channel inicial
+    setStatus('connecting')
+    createChannel()
+
+    return () => {
+      cleanup()
+    }
+  }, [code, role]) // Não incluir createChannel/cleanup para evitar loops
+
+  // Heartbeat para verificar conexão
+  useEffect(() => {
+    if (!code || role === 'none' || status !== 'connected') {
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current)
+        heartbeatIntervalRef.current = null
+      }
+      return
+    }
+
+    heartbeatIntervalRef.current = setInterval(() => {
+      if (!channelRef.current) {
+        console.warn('[Realtime] Heartbeat: No channel, triggering reconnect')
+        scheduleReconnect()
+        return
+      }
+
+      // Verificar estado do channel
+      const state = channelRef.current.state
+      if (state !== 'joined') {
+        console.warn('[Realtime] Heartbeat: Channel not joined, state:', state)
+        scheduleReconnect()
+      }
+    }, HEARTBEAT_INTERVAL_MS)
+
+    return () => {
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current)
+        heartbeatIntervalRef.current = null
+      }
+    }
+  }, [code, role, status, scheduleReconnect])
+
+  // Listener para visibilitychange (quando dispositivo sai do modo sleep)
+  useEffect(() => {
+    if (!code || role === 'none') return
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[Realtime] Page became visible, checking connection...')
+
+        // Verificar se channel ainda está conectado
+        if (!channelRef.current || channelRef.current.state !== 'joined') {
+          console.log('[Realtime] Connection lost while hidden, reconnecting...')
+          reconnect()
+        }
+      }
+    }
+
+    const handleOnline = () => {
+      console.log('[Realtime] Network came online, reconnecting...')
+      reconnect()
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('online', handleOnline)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('online', handleOnline)
+    }
+  }, [code, role, reconnect])
 
   // Função para limpar o estado de jogo encerrado
   const clearEndReason = useCallback(() => {

@@ -7,8 +7,15 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('Supabase credentials not configured. Multi-device sync will be disabled.')
 }
 
-export const supabase: SupabaseClient | null = supabaseUrl && supabaseAnonKey
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null
+export const supabase: SupabaseClient | null =
+  supabaseUrl && supabaseAnonKey
+    ? createClient(supabaseUrl, supabaseAnonKey, {
+        realtime: {
+          params: {
+            eventsPerSecond: 10,
+          },
+        },
+      })
+    : null
 
 export const isSupabaseConfigured = !!supabase

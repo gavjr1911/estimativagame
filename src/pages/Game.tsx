@@ -20,7 +20,7 @@ export default function Game() {
   const isHost = role === 'host'
 
   // Ativar realtime sync
-  const { endReason, clearEndReason } = useRealtimeGame()
+  const { endReason, clearEndReason, reconnect } = useRealtimeGame()
 
   // Detectar quando o host encerra o jogo ou para o compartilhamento
   useEffect(() => {
@@ -98,7 +98,7 @@ export default function Game() {
           <div className="flex items-center gap-2">
             {/* Status de sincronização */}
             {isConfigured && (isHost || isViewer) && (
-              <SyncStatus />
+              <SyncStatus onReconnect={reconnect} />
             )}
             <button
               onClick={() => setShowSettings(true)}
