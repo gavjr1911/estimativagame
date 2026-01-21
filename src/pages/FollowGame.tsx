@@ -1,7 +1,7 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGameStore, useSyncStore } from '../stores'
-import { useRealtimeGame } from '../hooks'
+import { useRealtimeGame, type EndReason } from '../hooks'
 import { useGameInsights } from '../hooks/useGameInsights'
 import { PageContainer, Header } from '../components/layout'
 import { SyncBar } from '../components/sync'
@@ -23,9 +23,12 @@ import {
  */
 export default function FollowGame() {
   const navigate = useNavigate()
-  const { game } = useGameStore()
-  const { role } = useSyncStore()
+  const { game, resetGame } = useGameStore()
+  const { role, status } = useSyncStore()
   const { reconnect, endReason, clearEndReason } = useRealtimeGame()
+
+  // Estado para mostrar modal de encerramento
+  const [showEndModal, setShowEndModal] = useState<EndReason>(null)
 
   // Hook de insights
   const {
@@ -38,7 +41,8 @@ export default function FollowGame() {
 
   // Se não há jogo ou não é viewer, redirecionar
   useEffect(() => {
-    if (!game) {
+    // Se não tem jogo e não está mostrando modal de encerramento, voltar para home
+    if (!game && !showEndModal) {
       navigate('/')
       return
     }
@@ -48,15 +52,62 @@ export default function FollowGame() {
       navigate('/jogo')
       return
     }
-  }, [game, role, navigate])
+  }, [game, role, navigate, showEndModal])
 
   // Tratar fim do jogo pelo host
   useEffect(() => {
     if (endReason) {
-      // Poderia mostrar um modal aqui
+      console.log('[FollowGame] Game ended by host:', endReason)
+      setShowEndModal(endReason)
       clearEndReason()
     }
   }, [endReason, clearEndReason])
+
+  // Tratar desconexão (viewer foi desconectado sem motivo claro)
+  useEffect(() => {
+    if (status === 'disconnected' && role === 'none' && !showEndModal) {
+      // Se ficou desconectado e sem role, provavelmente o jogo acabou
+      navigate('/')
+    }
+  }, [status, role, showEndModal, navigate])
+
+  // Função para sair após ver o modal
+  const handleExitGame = () => {
+    setShowEndModal(null)
+    resetGame()
+    navigate('/')
+  }
+
+  // Modal de encerramento do jogo
+  if (showEndModal) {
+    const isInterrupted = showEndModal === 'game_interrupted'
+
+    return (
+      <PageContainer>
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="bg-slate-800 rounded-2xl p-6 max-w-sm w-full text-center border border-white/10 shadow-xl">
+            <div className="text-5xl mb-4">
+              {isInterrupted ? '🛑' : '👋'}
+            </div>
+            <h2 className="text-xl font-bold text-white mb-2">
+              {isInterrupted ? 'Jogo Encerrado' : 'Transmissão Encerrada'}
+            </h2>
+            <p className="text-white/70 mb-6">
+              {isInterrupted
+                ? 'O host interrompeu a partida.'
+                : 'O host parou de compartilhar o jogo.'}
+            </p>
+            <button
+              onClick={handleExitGame}
+              className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition-colors"
+            >
+              Voltar ao Início
+            </button>
+          </div>
+        </div>
+      </PageContainer>
+    )
+  }
 
   if (!game) {
     return null
