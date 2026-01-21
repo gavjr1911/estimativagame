@@ -99,6 +99,18 @@ export interface GameInsights {
   accuracy: AccuracyInsight
   trends: TrendInsight[]
   highlights: HighlightInsight[]
+  /** Resumo narrativo para continuidade */
+  narrativeSummary?: string
+}
+
+/**
+ * Histórico resumido de insights para contexto
+ */
+export interface InsightsHistoryEntry {
+  roundNumber: number
+  narrativeSummary: string
+  keyMoments: string[]
+  playerNicknames: Record<string, string>
 }
 
 /**

@@ -1,20 +1,25 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import type { Game } from '../types'
-import type { GameInsights } from '../types/insights'
+import type { GameInsights, InsightsHistoryEntry } from '../types/insights'
 
 const FUNCTION_NAME = 'generate-insights'
 
 /**
  * Gera insights da partida usando AI via Supabase Edge Function
+ * @param game - Estado atual do jogo
+ * @param history - Histórico de insights anteriores para manter contexto
  */
-export async function generateInsights(game: Game): Promise<GameInsights> {
+export async function generateInsights(
+  game: Game,
+  history: InsightsHistoryEntry[] = []
+): Promise<GameInsights> {
   if (!isSupabaseConfigured || !supabase) {
     throw new Error('Supabase não está configurado')
   }
 
   console.log('[Insights] Calling Edge Function with game:', game.id)
-  console.log('[Insights] Game data:', JSON.stringify(game, null, 2))
   console.log('[Insights] Rounds finished:', game.rounds.filter(r => r.status === 'finished').length)
+  console.log('[Insights] History entries:', history.length)
 
   // Validar estrutura mínima
   if (!game.players || game.players.length === 0) {
@@ -26,7 +31,10 @@ export async function generateInsights(game: Game): Promise<GameInsights> {
 
   try {
     const { data, error } = await supabase.functions.invoke(FUNCTION_NAME, {
-      body: { gameData: game },
+      body: {
+        gameData: game,
+        insightsHistory: history,
+      },
     })
 
     console.log('[Insights] Response:', { data, error })

@@ -31,10 +31,18 @@ interface GameData {
   direction: string
 }
 
-function buildPrompt(gameData: GameData): string {
+interface InsightsHistoryEntry {
+  roundNumber: number
+  narrativeSummary: string
+  keyMoments: string[]
+  playerNicknames: Record<string, string>
+}
+
+function buildPrompt(gameData: GameData, history: InsightsHistoryEntry[] = []): string {
   const currentRound = gameData.rounds[gameData.currentRoundIndex]
   const roundsPlayed = gameData.rounds.filter(r => r.status === 'finished').length
   const roundsLeft = gameData.totalRounds - roundsPlayed
+  const isFirstInsights = history.length === 0
 
   // Preparar dados resumidos para o prompt
   const playersSummary = gameData.players.map(p => {
@@ -93,7 +101,43 @@ function buildPrompt(gameData: GameData): string {
   playersSummary.sort((a, b) => b.totalScore - a.totalScore)
   playersSummary.forEach((p, i) => (p.position = i + 1))
 
+  // Construir contexto do histórico
+  let historyContext = ''
+  if (history.length > 0) {
+    // Extrair apelidos já usados (usar os mais recentes)
+    const existingNicknames: Record<string, string> = {}
+    history.forEach(h => {
+      Object.entries(h.playerNicknames || {}).forEach(([name, nickname]) => {
+        existingNicknames[name] = nickname
+      })
+    })
+
+    historyContext = `
+CONTEXTO NARRATIVO (MUITO IMPORTANTE - MANTENHA A CONTINUIDADE!):
+Esta é uma continuação da narrativa. Você já fez análises anteriores desta partida.
+
+APELIDOS JÁ ESTABELECIDOS (USE OS MESMOS!):
+${Object.entries(existingNicknames).map(([name, nick]) => `- ${name}: "${nick}"`).join('\n')}
+
+HISTÓRICO DA NARRATIVA:
+${history.map(h => `
+Rodada ${h.roundNumber}:
+- Resumo: ${h.narrativeSummary}
+- Momentos-chave: ${h.keyMoments.join('; ')}
+`).join('\n')}
+
+REGRAS DE CONTINUIDADE:
+1. MANTENHA os apelidos já criados para cada jogador (não invente novos!)
+2. Referencie eventos passados quando relevante ("como vimos na rodada X...")
+3. Evolua a narrativa: se alguém estava em má fase e melhorou, destaque a virada
+4. Se o líder mudou, comente a "troca de coroa"
+5. Mantenha consistência: não contradiga análises anteriores sem justificativa
+6. Construa arcos narrativos: vilões, heróis, azarões, etc.
+`
+  }
+
   return `Você é um narrador MUITO divertido e descontraído de uma partida do jogo de cartas "Estimativa".
+${isFirstInsights ? 'Esta é a PRIMEIRA análise da partida - estabeleça os personagens e suas características!' : ''}
 
 REGRAS DO TOM DE VOZ (IMPORTANTE!):
 - Seja zoeiro mas respeitoso, como um grupo de amigos jogando
@@ -103,9 +147,10 @@ REGRAS DO TOM DE VOZ (IMPORTANTE!):
 - Seja criativo nos apelidos e comparações
 - Use gírias brasileiras naturalmente (tipo "tá on fire", "mitou", "zerou", etc)
 - Alterne entre análises sérias e zoeiras leves
-
+${historyContext}
 DADOS DA PARTIDA:
 - Rodada atual: ${currentRound.number} de ${gameData.totalRounds}
+- Rodadas jogadas: ${roundsPlayed}
 - Rodadas restantes: ${roundsLeft}
 - Cartas na rodada atual: ${currentRound.cardCount}
 - Status da rodada: ${currentRound.status}
@@ -116,11 +161,12 @@ ${JSON.stringify(playersSummary, null, 2)}
 GERE UM JSON (apenas o JSON, sem markdown) com EXATAMENTE esta estrutura:
 
 {
+  "narrativeSummary": "resumo de 1 frase do momento atual da partida para contexto futuro",
   "momentum": [
     {
       "playerName": "nome",
       "type": "on_fire|bad_phase|comeback|consistent|volatile",
-      "message": "frase criativa e zoeira sobre o momento do jogador"
+      "message": "frase criativa sobre o momento do jogador"
     }
   ],
   "race": {
@@ -134,17 +180,17 @@ GERE UM JSON (apenas o JSON, sem markdown) com EXATAMENTE esta estrutura:
         "message": "análise curta e divertida"
       }
     ],
-    "turnoverChance": "análise das chances de virada com porcentagens inventadas mas plausíveis",
+    "turnoverChance": "análise das chances de virada",
     "roundsLeft": ${roundsLeft}
   },
   "profiles": [
     {
       "playerName": "nome",
-      "nickname": "apelido criativo e engraçado baseado no estilo de jogo",
+      "nickname": "${isFirstInsights ? 'apelido criativo baseado no estilo' : 'MANTENHA O APELIDO DO HISTÓRICO'}",
       "style": "conservador|agressivo|equilibrado|imprevisivel",
-      "strengths": ["ponto forte 1", "ponto forte 2"],
+      "strengths": ["ponto forte 1"],
       "weaknesses": ["ponto fraco 1"],
-      "funFact": "curiosidade engraçada sobre o desempenho"
+      "funFact": "curiosidade sobre o desempenho"
     }
   ],
   "accuracy": {
@@ -159,13 +205,13 @@ GERE UM JSON (apenas o JSON, sem markdown) com EXATAMENTE esta estrutura:
         ]
       }
     ],
-    "tips": ["dica zoeira para cada jogador melhorar"]
+    "tips": ["dica zoeira para melhorar"]
   },
   "trends": [
     {
       "playerName": "nome",
       "type": "overestimate|underestimate|calibrated|early_game|late_game",
-      "message": "observação sobre tendência com zoeira",
+      "message": "observação sobre tendência",
       "value": 0.5
     }
   ],
@@ -175,19 +221,19 @@ GERE UM JSON (apenas o JSON, sem markdown) com EXATAMENTE esta estrutura:
       "playerName": "nome",
       "round": 3,
       "value": 50,
-      "message": "descrição épica do momento"
+      "message": "descrição do momento"
     }
   ]
 }
 
 IMPORTANTE:
-- Gere dados REAIS baseados nas estatísticas fornecidas
-- Seja CRIATIVO e NUNCA repita frases genéricas
+- Gere dados REAIS baseados nas estatísticas
+- Seja CRIATIVO e varie as frases
 - Use os nomes reais dos jogadores
-- Mantenha o tom leve e divertido
-- MANTENHA AS MENSAGENS CURTAS (máximo 100 caracteres cada)
-- Gere apenas 2-3 itens por categoria (momentum, trends, highlights)
-- Retorne APENAS o JSON válido e completo, sem texto antes ou depois`
+- MENSAGENS CURTAS (máx 80 caracteres)
+- Gere apenas 2-3 itens por categoria
+- ${isFirstInsights ? 'Crie apelidos memoráveis para cada jogador' : 'USE OS MESMOS APELIDOS do histórico!'}
+- Retorne APENAS o JSON válido`
 }
 
 Deno.serve(async (req) => {
@@ -202,14 +248,17 @@ Deno.serve(async (req) => {
       throw new Error('ANTHROPIC_API_KEY not configured')
     }
 
-    const { gameData } = await req.json()
+    const { gameData, insightsHistory = [] } = await req.json()
     if (!gameData) {
       throw new Error('gameData is required')
     }
 
+    console.log('Generating insights for round', gameData.currentRoundIndex + 1)
+    console.log('History entries:', insightsHistory.length)
+
     const client = new Anthropic({ apiKey })
 
-    const prompt = buildPrompt(gameData)
+    const prompt = buildPrompt(gameData, insightsHistory)
 
     const message = await client.messages.create({
       model: 'claude-3-haiku-20240307',

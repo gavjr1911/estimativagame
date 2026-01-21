@@ -1,17 +1,53 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Game } from '../types'
-import type { InsightsState } from '../types/insights'
+import type { InsightsState, InsightsHistoryEntry, GameInsights } from '../types/insights'
 import { generateInsights } from '../services/insightsService'
 
 // Configurações
 const CACHE_TTL_MS = 60000 // 1 minuto de cache
-const MIN_ROUNDS_FOR_INSIGHTS = 1 // Mínimo de rodadas finalizadas para gerar insights
+const MIN_ROUNDS_FOR_INSIGHTS = 2 // Mínimo de rodadas finalizadas para gerar insights
+const MAX_HISTORY_ENTRIES = 5 // Máximo de entradas no histórico para contexto
 
 interface UseGameInsightsOptions {
   /** Se deve gerar insights automaticamente quando o jogo muda */
   autoGenerate?: boolean
   /** Intervalo mínimo entre gerações automáticas (ms) */
   minInterval?: number
+}
+
+/**
+ * Extrai um resumo do histórico a partir dos insights gerados
+ */
+function extractHistoryEntry(insights: GameInsights): InsightsHistoryEntry {
+  // Extrair apelidos dos perfis
+  const playerNicknames: Record<string, string> = {}
+  insights.profiles?.forEach(p => {
+    if (p.playerName && p.nickname) {
+      playerNicknames[p.playerName] = p.nickname
+    }
+  })
+
+  // Extrair momentos-chave
+  const keyMoments: string[] = []
+
+  // Adicionar destaques
+  insights.highlights?.slice(0, 2).forEach(h => {
+    if (h.message) keyMoments.push(h.message)
+  })
+
+  // Adicionar momentos de momentum importantes
+  insights.momentum?.forEach(m => {
+    if (m.type === 'on_fire' || m.type === 'comeback') {
+      keyMoments.push(`${m.playerName}: ${m.message}`)
+    }
+  })
+
+  return {
+    roundNumber: insights.roundNumber,
+    narrativeSummary: insights.narrativeSummary || insights.race?.summary || '',
+    keyMoments: keyMoments.slice(0, 3),
+    playerNicknames,
+  }
 }
 
 /**
@@ -30,6 +66,9 @@ export function useGameInsights(
     lastUpdated: null,
   })
 
+  // Histórico de insights para contexto
+  const [insightsHistory, setInsightsHistory] = useState<InsightsHistoryEntry[]>([])
+
   const lastGeneratedRoundRef = useRef<number>(-1)
   const isGeneratingRef = useRef(false)
 
@@ -47,7 +86,7 @@ export function useGameInsights(
     if (finishedRounds < MIN_ROUNDS_FOR_INSIGHTS) {
       setState(prev => ({
         ...prev,
-        error: 'Aguardando mais rodadas para gerar insights',
+        error: `Aguardando ${MIN_ROUNDS_FOR_INSIGHTS - finishedRounds} rodada(s) para gerar insights`,
       }))
       return
     }
@@ -72,7 +111,10 @@ export function useGameInsights(
 
     try {
       console.log('[Insights] Generating insights for round', game.currentRoundIndex + 1)
-      const insights = await generateInsights(game)
+      console.log('[Insights] Using history with', insightsHistory.length, 'entries')
+
+      // Passar histórico para manter contexto narrativo
+      const insights = await generateInsights(game, insightsHistory)
 
       setState({
         insights,
@@ -80,6 +122,19 @@ export function useGameInsights(
         error: null,
         lastUpdated: Date.now(),
       })
+
+      // Atualizar histórico com os novos insights
+      if (insights) {
+        const historyEntry = extractHistoryEntry(insights)
+        setInsightsHistory(prev => {
+          // Evitar duplicatas da mesma rodada
+          const filtered = prev.filter(h => h.roundNumber !== insights.roundNumber)
+          // Manter apenas as últimas N entradas
+          const updated = [...filtered, historyEntry].slice(-MAX_HISTORY_ENTRIES)
+          console.log('[Insights] Updated history:', updated.length, 'entries')
+          return updated
+        })
+      }
 
       lastGeneratedRoundRef.current = game.currentRoundIndex
     } catch (error) {
@@ -92,7 +147,7 @@ export function useGameInsights(
     } finally {
       isGeneratingRef.current = false
     }
-  }, [game, state.lastUpdated])
+  }, [game, state.lastUpdated, insightsHistory])
 
   /**
    * Força regeneração dos insights
@@ -102,7 +157,7 @@ export function useGameInsights(
   }, [generate])
 
   /**
-   * Limpa os insights
+   * Limpa os insights e histórico
    */
   const clear = useCallback(() => {
     setState({
@@ -111,6 +166,7 @@ export function useGameInsights(
       error: null,
       lastUpdated: null,
     })
+    setInsightsHistory([])
     lastGeneratedRoundRef.current = -1
   }, [])
 
@@ -138,12 +194,19 @@ export function useGameInsights(
     generate()
   }, [game, autoGenerate, minInterval, generate, state.lastUpdated])
 
+  // Calcular rodadas restantes para poder gerar
+  const finishedRounds = game?.rounds.filter(r => r.status === 'finished').length ?? 0
+  const roundsUntilInsights = Math.max(0, MIN_ROUNDS_FOR_INSIGHTS - finishedRounds)
+
   return {
     ...state,
     generate,
     refresh,
     clear,
     hasInsights: !!state.insights,
-    canGenerate: !!game && game.rounds.filter(r => r.status === 'finished').length >= MIN_ROUNDS_FOR_INSIGHTS,
+    canGenerate: !!game && finishedRounds >= MIN_ROUNDS_FOR_INSIGHTS,
+    roundsUntilInsights,
+    minRoundsRequired: MIN_ROUNDS_FOR_INSIGHTS,
+    historyLength: insightsHistory.length,
   }
 }
