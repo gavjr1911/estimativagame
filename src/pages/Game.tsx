@@ -378,6 +378,22 @@ export default function Game() {
         title="Configurações"
       >
         <div className="space-y-3">
+          {/* Botão de ver insights e estatísticas (para host) */}
+          {!isViewer && (
+            <button
+              onClick={() => {
+                setShowSettings(false)
+                navigate('/acompanhar')
+              }}
+              className="w-full flex items-center gap-3 p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/20 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              <span className="font-medium">Ver Insights e Estatísticas</span>
+            </button>
+          )}
+
           {/* Botão de compartilhar (apenas host e quando Supabase configurado) */}
           {isConfigured && !isViewer && (
             <button

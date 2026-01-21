@@ -39,20 +39,18 @@ export default function FollowGame() {
     canGenerate,
   } = useGameInsights(game)
 
-  // Se não há jogo ou não é viewer, redirecionar
+  // Se não há jogo, redirecionar para home
   useEffect(() => {
     // Se não tem jogo e não está mostrando modal de encerramento, voltar para home
     if (!game && !showEndModal) {
       navigate('/')
       return
     }
+  }, [game, showEndModal, navigate])
 
-    // Se é host, redirecionar para a página de jogo normal
-    if (role === 'host') {
-      navigate('/jogo')
-      return
-    }
-  }, [game, role, navigate, showEndModal])
+  // Host ou viewer pode acessar esta página
+  const isHost = role === 'host' || role === 'none' // 'none' quando é host sem compartilhamento
+  const isViewer = role === 'viewer'
 
   // Tratar fim do jogo pelo host
   useEffect(() => {
@@ -127,7 +125,30 @@ export default function FollowGame() {
     <PageContainer>
       {/* Header */}
       <Header
-        title="Acompanhando"
+        title={isViewer ? 'Acompanhando' : 'Estatísticas'}
+        leftAction={
+          isHost ? (
+            <button
+              onClick={() => navigate('/jogo')}
+              className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+              title="Voltar para o jogo"
+            >
+              <svg
+                className="w-5 h-5 text-white"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 19l-7-7 7-7"
+                />
+              </svg>
+            </button>
+          ) : undefined
+        }
         rightAction={
           canGenerate ? (
             <button
@@ -154,8 +175,8 @@ export default function FollowGame() {
         }
       />
 
-      {/* Barra de sincronização */}
-      <SyncBar onReconnect={reconnect} />
+      {/* Barra de sincronização (apenas para viewers) */}
+      {isViewer && <SyncBar onReconnect={reconnect} />}
 
       {/* Conteúdo principal */}
       <div className="flex-1 overflow-y-auto">

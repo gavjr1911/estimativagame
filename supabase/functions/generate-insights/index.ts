@@ -184,19 +184,22 @@ GERE UM JSON (apenas o JSON, sem markdown) com EXATAMENTE esta estrutura:
     "roundsLeft": ${roundsLeft}
   },
   "profiles": [
+    // OBRIGATÓRIO: Um perfil para CADA jogador da partida!
     {
-      "playerName": "nome",
+      "playerName": "nome do jogador",
       "nickname": "${isFirstInsights ? 'apelido criativo baseado no estilo' : 'MANTENHA O APELIDO DO HISTÓRICO'}",
       "style": "conservador|agressivo|equilibrado|imprevisivel",
       "strengths": ["ponto forte 1"],
       "weaknesses": ["ponto fraco 1"],
       "funFact": "curiosidade sobre o desempenho"
     }
+    // ... repita para TODOS os jogadores
   ],
   "accuracy": {
     "byPlayer": [
+      // OBRIGATÓRIO: Dados de assertividade para CADA jogador!
       {
-        "playerName": "nome",
+        "playerName": "nome do jogador",
         "overall": 75,
         "byRange": [
           {"range": "0", "percentage": 100, "total": 2, "hits": 2},
@@ -204,6 +207,7 @@ GERE UM JSON (apenas o JSON, sem markdown) com EXATAMENTE esta estrutura:
           {"range": "3+", "percentage": 33, "total": 3, "hits": 1}
         ]
       }
+      // ... repita para TODOS os jogadores
     ],
     "tips": ["dica zoeira para melhorar"]
   },
@@ -231,7 +235,9 @@ IMPORTANTE:
 - Seja CRIATIVO e varie as frases
 - Use os nomes reais dos jogadores
 - MENSAGENS CURTAS (máx 80 caracteres)
-- Gere apenas 2-3 itens por categoria
+- Gere apenas 2-3 itens por categoria (momentum, trends, highlights)
+- OBRIGATÓRIO: "profiles" deve ter um perfil para CADA jogador (${playersSummary.length} jogadores)
+- OBRIGATÓRIO: "accuracy.byPlayer" deve ter dados de CADA jogador (${playersSummary.length} jogadores)
 - ${isFirstInsights ? 'Crie apelidos memoráveis para cada jogador' : 'USE OS MESMOS APELIDOS do histórico!'}
 - Retorne APENAS o JSON válido`
 }
