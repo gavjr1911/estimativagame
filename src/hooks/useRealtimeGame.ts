@@ -8,9 +8,10 @@ import type { RealtimeChannel } from '@supabase/supabase-js'
 export type EndReason = 'share_stopped' | 'game_interrupted' | null
 
 // Constantes de reconexão
-const RECONNECT_DELAY_MS = 2000
-const MAX_RECONNECT_ATTEMPTS = 10
-const HEARTBEAT_INTERVAL_MS = 30000
+const RECONNECT_DELAY_MS = 1500
+const MAX_RECONNECT_ATTEMPTS = 15
+const HEARTBEAT_INTERVAL_MS = 15000
+const VISIBILITY_RECONNECT_DELAY_MS = 500
 
 /**
  * Hook para sincronização em tempo real do jogo
@@ -118,6 +119,15 @@ export function useRealtimeGame() {
             setStatus('connected')
             reconnectAttemptsRef.current = 0
             isReconnectingRef.current = false
+
+            // Se for host, enviar pendências após reconexão
+            if (role === 'host') {
+              console.log('[Realtime] Host reconnected, flushing pending sync')
+              // Pequeno delay para garantir que a conexão esteja estável
+              setTimeout(() => {
+                useSyncStore.getState().flushPendingSync()
+              }, 200)
+            }
             break
 
           case 'CHANNEL_ERROR':
@@ -213,6 +223,15 @@ export function useRealtimeGame() {
       if (state !== 'joined') {
         console.warn('[Realtime] Heartbeat: Channel not joined, state:', state)
         scheduleReconnect()
+      } else {
+        // Se estiver conectado e for host, verificar se há pendências
+        if (role === 'host') {
+          const { hasPendingChanges } = useSyncStore.getState()
+          if (hasPendingChanges) {
+            console.log('[Realtime] Heartbeat: Found pending changes, flushing...')
+            useSyncStore.getState().flushPendingSync()
+          }
+        }
       }
     }, HEARTBEAT_INTERVAL_MS)
 
@@ -228,14 +247,40 @@ export function useRealtimeGame() {
   useEffect(() => {
     if (!code || role === 'none') return
 
+    let visibilityTimeout: ReturnType<typeof setTimeout> | null = null
+
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         console.log('[Realtime] Page became visible, checking connection...')
 
-        // Verificar se channel ainda está conectado
-        if (!channelRef.current || channelRef.current.state !== 'joined') {
-          console.log('[Realtime] Connection lost while hidden, reconnecting...')
-          reconnect()
+        // Pequeno delay para permitir que a rede se estabilize
+        if (visibilityTimeout) {
+          clearTimeout(visibilityTimeout)
+        }
+
+        visibilityTimeout = setTimeout(() => {
+          // Verificar se channel ainda está conectado
+          const channelState = channelRef.current?.state
+          const isConnected = channelState === 'joined'
+
+          console.log('[Realtime] Channel state:', channelState, 'isConnected:', isConnected)
+
+          if (!isConnected) {
+            console.log('[Realtime] Connection lost while hidden, reconnecting...')
+            reconnect()
+          } else {
+            // Mesmo conectado, forçar flush de pendências para o host
+            if (role === 'host') {
+              console.log('[Realtime] Host: Flushing pending sync after visibility change')
+              useSyncStore.getState().flushPendingSync()
+            }
+          }
+        }, VISIBILITY_RECONNECT_DELAY_MS)
+      } else {
+        // Quando sai de vista, limpar timeout pendente
+        if (visibilityTimeout) {
+          clearTimeout(visibilityTimeout)
+          visibilityTimeout = null
         }
       }
     }
@@ -245,12 +290,28 @@ export function useRealtimeGame() {
       reconnect()
     }
 
+    const handleFocus = () => {
+      // Verificação adicional quando a janela ganha foco
+      if (document.visibilityState === 'visible') {
+        const channelState = channelRef.current?.state
+        if (channelState !== 'joined') {
+          console.log('[Realtime] Window focused but not connected, reconnecting...')
+          reconnect()
+        }
+      }
+    }
+
     document.addEventListener('visibilitychange', handleVisibilityChange)
     window.addEventListener('online', handleOnline)
+    window.addEventListener('focus', handleFocus)
 
     return () => {
+      if (visibilityTimeout) {
+        clearTimeout(visibilityTimeout)
+      }
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('online', handleOnline)
+      window.removeEventListener('focus', handleFocus)
     }
   }, [code, role, reconnect])
 

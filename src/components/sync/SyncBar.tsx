@@ -6,11 +6,23 @@ interface SyncBarProps {
 }
 
 /**
+ * Formata tempo relativo (ex: "há 5s", "há 2min")
+ */
+function formatRelativeTime(timestamp: number | null): string {
+  if (!timestamp) return ''
+  const diff = Math.floor((Date.now() - timestamp) / 1000)
+  if (diff < 5) return 'agora'
+  if (diff < 60) return `há ${diff}s`
+  if (diff < 3600) return `há ${Math.floor(diff / 60)}min`
+  return `há ${Math.floor(diff / 3600)}h`
+}
+
+/**
  * Barra de status de sincronização abaixo do header
  * Mostra código, status de conexão e viewers
  */
 export default function SyncBar({ onReconnect }: SyncBarProps) {
-  const { role, status, code, viewerCount } = useSyncStore()
+  const { role, status, code, viewerCount, lastSyncedAt, hasPendingChanges } = useSyncStore()
 
   // Não mostrar se não está sincronizando
   if (role === 'none' || !code) {
@@ -21,6 +33,7 @@ export default function SyncBar({ onReconnect }: SyncBarProps) {
   const isConnecting = status === 'connecting'
   const isHost = role === 'host'
   const isViewer = role === 'viewer'
+  const hasPending = isHost && hasPendingChanges
 
   const handleClick = () => {
     if (!isConnected && !isConnecting && onReconnect) {
@@ -103,6 +116,37 @@ export default function SyncBar({ onReconnect }: SyncBarProps) {
                 {viewerCount} {viewerCount === 1 ? 'visualizando' : 'visualizando'}
               </span>
             </div>
+
+            {/* Indicador de pendências ou última sync */}
+            {hasPending ? (
+              <>
+                <span className="text-white/20">|</span>
+                <div className="flex items-center gap-1 text-yellow-400">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-3 w-3 animate-spin"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                  <span className="text-xs">Sincronizando...</span>
+                </div>
+              </>
+            ) : lastSyncedAt ? (
+              <>
+                <span className="text-white/20">|</span>
+                <span className="text-xs text-white/40">
+                  Sync {formatRelativeTime(lastSyncedAt)}
+                </span>
+              </>
+            ) : null}
           </>
         )}
 

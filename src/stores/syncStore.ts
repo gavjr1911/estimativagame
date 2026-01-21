@@ -5,9 +5,42 @@ import type { SyncRole, SyncStatus } from '../types'
 import type { Game } from '../types'
 import { getDeviceId, generateShareCode, normalizeCode } from '../utils'
 
-// Debounce para evitar muitas atualizações
+// Configurações de sincronização
+const SYNC_DEBOUNCE_MS = 300
+const SYNC_RETRY_DELAY_MS = 1000
+const MAX_SYNC_RETRIES = 5
+
+// Estado da fila de sincronização
 let syncTimeout: ReturnType<typeof setTimeout> | null = null
-const SYNC_DEBOUNCE_MS = 500
+let retryTimeout: ReturnType<typeof setTimeout> | null = null
+let pendingGameState: Game | null = null
+let retryCount = 0
+let isSyncing = false
+
+// Função auxiliar para agendar retry com backoff exponencial
+function scheduleRetry(fn: () => void) {
+  if (retryTimeout) {
+    clearTimeout(retryTimeout)
+  }
+  const delay = SYNC_RETRY_DELAY_MS * Math.pow(1.5, Math.min(retryCount, 5))
+  console.log(`[Sync] Retry scheduled in ${delay}ms`)
+  retryTimeout = setTimeout(fn, delay)
+}
+
+// Função para limpar timers de sync
+function clearSyncTimers() {
+  if (syncTimeout) {
+    clearTimeout(syncTimeout)
+    syncTimeout = null
+  }
+  if (retryTimeout) {
+    clearTimeout(retryTimeout)
+    retryTimeout = null
+  }
+  pendingGameState = null
+  retryCount = 0
+  isSyncing = false
+}
 
 interface SyncStoreState {
   role: SyncRole
@@ -16,6 +49,8 @@ interface SyncStoreState {
   error: string | null
   viewerCount: number
   deviceId: string
+  lastSyncedAt: number | null
+  hasPendingChanges: boolean
 }
 
 interface SyncStoreActions {
@@ -23,6 +58,7 @@ interface SyncStoreActions {
   joinGame: (code: string) => Promise<Game | null>
   leaveGame: () => Promise<void>
   syncGameState: (game: Game) => Promise<void>
+  flushPendingSync: () => Promise<void>
   setStatus: (status: SyncStatus) => void
   setError: (error: string | null) => void
   updateViewerCount: (count: number) => void
@@ -38,6 +74,8 @@ const initialState: SyncStoreState = {
   error: null,
   viewerCount: 0,
   deviceId: '',
+  lastSyncedAt: null,
+  hasPendingChanges: false,
 }
 
 export const useSyncStore = create<SyncStore>()(
@@ -204,43 +242,97 @@ export const useSyncStore = create<SyncStore>()(
           console.error('Error leaving game:', err)
         }
 
+        clearSyncTimers()
         set({ ...initialState, deviceId: get().deviceId })
       },
 
       /**
        * Sincroniza o estado do jogo (apenas host)
+       * Implementa fila de pendentes e retry automático
        */
       syncGameState: async (game: Game): Promise<void> => {
-        const { role, code, status } = get()
+        const { role, code } = get()
 
         if (!isSupabaseConfigured || !supabase) return
         if (role !== 'host' || !code) return
-        if (status !== 'connected') return
+
+        // Sempre armazena o estado mais recente
+        pendingGameState = game
+        set({ hasPendingChanges: true })
 
         // Debounce para evitar muitas atualizações
         if (syncTimeout) {
           clearTimeout(syncTimeout)
         }
 
-        syncTimeout = setTimeout(async () => {
-          if (!supabase) return
-
-          try {
-            const { error: updateError } = await supabase
-              .from('shared_games')
-              .update({
-                game_data: game,
-                status: game.status === 'finished' ? 'finished' : 'active',
-              })
-              .eq('code', code)
-
-            if (updateError) {
-              console.error('Error syncing game:', updateError)
-            }
-          } catch (err) {
-            console.error('Error syncing game:', err)
-          }
+        syncTimeout = setTimeout(() => {
+          get().flushPendingSync()
         }, SYNC_DEBOUNCE_MS)
+      },
+
+      /**
+       * Envia as alterações pendentes para o servidor
+       * Chamado após reconexão ou quando há pendências
+       */
+      flushPendingSync: async (): Promise<void> => {
+        const { role, code, status } = get()
+
+        if (!isSupabaseConfigured || !supabase) return
+        if (role !== 'host' || !code) return
+        if (!pendingGameState) return
+        if (isSyncing) return
+
+        // Se não está conectado, agenda retry
+        if (status !== 'connected') {
+          console.log('[Sync] Not connected, will retry when connection is restored')
+          set({ hasPendingChanges: true })
+          scheduleRetry(get().flushPendingSync)
+          return
+        }
+
+        isSyncing = true
+        const gameToSync = pendingGameState
+
+        try {
+          console.log('[Sync] Sending game state to server...')
+          const { error: updateError } = await supabase
+            .from('shared_games')
+            .update({
+              game_data: gameToSync,
+              status: gameToSync.status === 'finished' ? 'finished' : 'active',
+            })
+            .eq('code', code)
+
+          if (updateError) {
+            throw updateError
+          }
+
+          console.log('[Sync] Game state synced successfully')
+
+          // Se o estado mudou durante o sync, não limpa pendências
+          if (pendingGameState === gameToSync) {
+            pendingGameState = null
+            set({ hasPendingChanges: false })
+          }
+
+          set({ lastSyncedAt: Date.now() })
+          retryCount = 0
+
+        } catch (err) {
+          console.error('[Sync] Error syncing game:', err)
+          retryCount++
+
+          if (retryCount < MAX_SYNC_RETRIES) {
+            console.log(`[Sync] Scheduling retry ${retryCount}/${MAX_SYNC_RETRIES}`)
+            scheduleRetry(get().flushPendingSync)
+          } else {
+            console.error('[Sync] Max retries reached, giving up')
+            set({ error: 'Falha ao sincronizar. Verifique sua conexão.' })
+            retryCount = 0
+          }
+        } finally {
+          isSyncing = false
+        }
       },
 
       setStatus: (status: SyncStatus) => set({ status }),
@@ -249,7 +341,10 @@ export const useSyncStore = create<SyncStore>()(
 
       updateViewerCount: (viewerCount: number) => set({ viewerCount }),
 
-      reset: () => set({ ...initialState, deviceId: get().deviceId }),
+      reset: () => {
+        clearSyncTimers()
+        set({ ...initialState, deviceId: get().deviceId })
+      },
     }),
     {
       name: 'estimativa-sync',
