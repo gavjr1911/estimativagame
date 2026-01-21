@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { Home, NewGame, Game, Results, History, Rules } from './pages'
+import { Home, NewGame, Game, FollowGame, Results, History, Rules } from './pages'
 
 function App() {
   return (
@@ -8,6 +8,7 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/novo-jogo" element={<NewGame />} />
         <Route path="/jogo" element={<Game />} />
+        <Route path="/acompanhar" element={<FollowGame />} />
         <Route path="/resultado" element={<Results />} />
         <Route path="/historico" element={<History />} />
         <Route path="/regras" element={<Rules />} />

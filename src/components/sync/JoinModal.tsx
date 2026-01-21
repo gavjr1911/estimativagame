@@ -37,7 +37,8 @@ export default function JoinModal({ isOpen, onClose }: JoinModalProps) {
       // Salvar jogo no store local
       useGameStore.setState({ game })
       onClose()
-      navigate('/jogo')
+      // Viewers vão para a tela de acompanhamento
+      navigate('/acompanhar')
     }
   }
 

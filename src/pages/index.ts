@@ -1,6 +1,7 @@
 export { default as Home } from './Home'
 export { default as NewGame } from './NewGame'
 export { default as Game } from './Game'
+export { default as FollowGame } from './FollowGame'
 export { default as Results } from './Results'
 export { default as History } from './History'
 export { default as Rules } from './Rules'

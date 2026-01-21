@@ -42,5 +42,9 @@ dev-dist
 # TypeScript
 *.tsbuildinfo
 
+# Supabase
+supabase/.temp/
+supabase/functions/.env.local
+
 # Misc
 *.local

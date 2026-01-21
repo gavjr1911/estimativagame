@@ -8,10 +8,11 @@ import type { RealtimeChannel } from '@supabase/supabase-js'
 export type EndReason = 'share_stopped' | 'game_interrupted' | null
 
 // Constantes de reconexão
-const RECONNECT_DELAY_MS = 1500
-const MAX_RECONNECT_ATTEMPTS = 15
-const HEARTBEAT_INTERVAL_MS = 15000
-const VISIBILITY_RECONNECT_DELAY_MS = 500
+const RECONNECT_DELAY_MS = 2000
+const MAX_RECONNECT_ATTEMPTS = 10
+const HEARTBEAT_INTERVAL_MS = 30000
+const VISIBILITY_RECONNECT_DELAY_MS = 1000
+const STATUS_DEBOUNCE_MS = 500
 
 /**
  * Hook para sincronização em tempo real do jogo
@@ -25,8 +26,46 @@ export function useRealtimeGame() {
   const reconnectAttemptsRef = useRef(0)
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const heartbeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const statusDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isReconnectingRef = useRef(false)
+  const lastStatusRef = useRef<string>(status)
   const [endReason, setEndReason] = useState<EndReason>(null)
+
+  // Função para mudar status com debounce (evita flicker)
+  const setStatusDebounced = useCallback((newStatus: 'connecting' | 'connected' | 'error' | 'disconnected') => {
+    // Se está mudando para 'connected', aplicar imediatamente
+    if (newStatus === 'connected') {
+      if (statusDebounceRef.current) {
+        clearTimeout(statusDebounceRef.current)
+        statusDebounceRef.current = null
+      }
+      if (lastStatusRef.current !== 'connected') {
+        lastStatusRef.current = 'connected'
+        setStatus('connected')
+      }
+      return
+    }
+
+    // Se já está no mesmo status, ignorar
+    if (lastStatusRef.current === newStatus) return
+
+    // Para outros status, aplicar debounce para evitar flicker
+    if (statusDebounceRef.current) {
+      clearTimeout(statusDebounceRef.current)
+    }
+
+    statusDebounceRef.current = setTimeout(() => {
+      // Verificar novamente se o channel não conectou enquanto esperava
+      if (channelRef.current?.state === 'joined') {
+        lastStatusRef.current = 'connected'
+        setStatus('connected')
+      } else {
+        lastStatusRef.current = newStatus
+        setStatus(newStatus)
+      }
+      statusDebounceRef.current = null
+    }, STATUS_DEBOUNCE_MS)
+  }, [setStatus])
 
   // Resetar endReason quando mudar de código
   useEffect(() => {
@@ -42,6 +81,10 @@ export function useRealtimeGame() {
     if (heartbeatIntervalRef.current) {
       clearInterval(heartbeatIntervalRef.current)
       heartbeatIntervalRef.current = null
+    }
+    if (statusDebounceRef.current) {
+      clearTimeout(statusDebounceRef.current)
+      statusDebounceRef.current = null
     }
     if (channelRef.current && supabase) {
       supabase.removeChannel(channelRef.current)
@@ -116,14 +159,13 @@ export function useRealtimeGame() {
         switch (subscribeStatus) {
           case 'SUBSCRIBED':
             console.log('[Realtime] Connected successfully')
-            setStatus('connected')
+            setStatusDebounced('connected')
             reconnectAttemptsRef.current = 0
             isReconnectingRef.current = false
 
             // Se for host, enviar pendências após reconexão
             if (role === 'host') {
               console.log('[Realtime] Host reconnected, flushing pending sync')
-              // Pequeno delay para garantir que a conexão esteja estável
               setTimeout(() => {
                 useSyncStore.getState().flushPendingSync()
               }, 200)
@@ -135,7 +177,7 @@ export function useRealtimeGame() {
           case 'CLOSED':
             console.warn('[Realtime] Connection lost:', subscribeStatus)
             if (!isReconnectingRef.current) {
-              setStatus('error')
+              setStatusDebounced('error')
               scheduleReconnect()
             }
             break
@@ -150,13 +192,17 @@ export function useRealtimeGame() {
     if (isReconnectingRef.current) return
     if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
       console.error('[Realtime] Max reconnect attempts reached')
-      setStatus('error')
+      setStatusDebounced('error')
       return
     }
 
     isReconnectingRef.current = true
     reconnectAttemptsRef.current++
-    setStatus('connecting')
+
+    // Só mudar para 'connecting' se não estiver já conectado
+    if (channelRef.current?.state !== 'joined') {
+      setStatusDebounced('connecting')
+    }
 
     const delay = RECONNECT_DELAY_MS * Math.min(reconnectAttemptsRef.current, 5)
     console.log(
@@ -167,7 +213,7 @@ export function useRealtimeGame() {
       console.log('[Realtime] Attempting to reconnect...')
       createChannel()
     }, delay)
-  }, [createChannel, setStatus])
+  }, [createChannel, setStatusDebounced])
 
   // Função para reconexão manual
   const reconnect = useCallback(async () => {
@@ -178,12 +224,12 @@ export function useRealtimeGame() {
     isReconnectingRef.current = false
 
     cleanup()
-    setStatus('connecting')
+    setStatusDebounced('connecting')
 
     // Pequeno delay para garantir cleanup
     await new Promise((resolve) => setTimeout(resolve, 100))
     createChannel()
-  }, [code, role, cleanup, createChannel, setStatus])
+  }, [code, role, cleanup, createChannel, setStatusDebounced])
 
   // Efeito principal - criar channel quando tiver código e role
   useEffect(() => {
@@ -192,18 +238,20 @@ export function useRealtimeGame() {
       return
     }
 
-    // Criar channel inicial
-    setStatus('connecting')
+    // Criar channel inicial (só muda status se ainda não estiver conectado)
+    if (channelRef.current?.state !== 'joined') {
+      setStatusDebounced('connecting')
+    }
     createChannel()
 
     return () => {
       cleanup()
     }
-  }, [code, role]) // Não incluir createChannel/cleanup para evitar loops
+  }, [code, role]) // Não incluir createChannel/cleanup/setStatusDebounced para evitar loops
 
-  // Heartbeat para verificar conexão
+  // Heartbeat para verificar conexão (menos agressivo)
   useEffect(() => {
-    if (!code || role === 'none' || status !== 'connected') {
+    if (!code || role === 'none') {
       if (heartbeatIntervalRef.current) {
         clearInterval(heartbeatIntervalRef.current)
         heartbeatIntervalRef.current = null
@@ -212,18 +260,19 @@ export function useRealtimeGame() {
     }
 
     heartbeatIntervalRef.current = setInterval(() => {
-      if (!channelRef.current) {
-        console.warn('[Realtime] Heartbeat: No channel, triggering reconnect')
-        scheduleReconnect()
+      const channelState = channelRef.current?.state
+
+      // Se estiver em estado de transição (joining, leaving), ignorar
+      if (channelState === 'joining' || channelState === 'leaving') {
+        console.log('[Realtime] Heartbeat: Channel in transition, skipping check')
         return
       }
 
-      // Verificar estado do channel
-      const state = channelRef.current.state
-      if (state !== 'joined') {
-        console.warn('[Realtime] Heartbeat: Channel not joined, state:', state)
+      // Se não estiver conectado e não estiver reconectando, agendar reconexão
+      if (channelState !== 'joined' && !isReconnectingRef.current) {
+        console.warn('[Realtime] Heartbeat: Channel not joined, state:', channelState)
         scheduleReconnect()
-      } else {
+      } else if (channelState === 'joined') {
         // Se estiver conectado e for host, verificar se há pendências
         if (role === 'host') {
           const { hasPendingChanges } = useSyncStore.getState()
@@ -241,7 +290,7 @@ export function useRealtimeGame() {
         heartbeatIntervalRef.current = null
       }
     }
-  }, [code, role, status, scheduleReconnect])
+  }, [code, role, scheduleReconnect])
 
   // Listener para visibilitychange (quando dispositivo sai do modo sleep)
   useEffect(() => {
@@ -259,18 +308,26 @@ export function useRealtimeGame() {
         }
 
         visibilityTimeout = setTimeout(() => {
+          // Se já está reconectando, não fazer nada
+          if (isReconnectingRef.current) {
+            console.log('[Realtime] Already reconnecting, skipping visibility check')
+            return
+          }
+
           // Verificar se channel ainda está conectado
           const channelState = channelRef.current?.state
           const isConnected = channelState === 'joined'
+          const isConnecting = channelState === 'joining'
 
-          console.log('[Realtime] Channel state:', channelState, 'isConnected:', isConnected)
+          console.log('[Realtime] Channel state:', channelState)
 
-          if (!isConnected) {
+          if (!isConnected && !isConnecting) {
             console.log('[Realtime] Connection lost while hidden, reconnecting...')
             reconnect()
-          } else {
-            // Mesmo conectado, forçar flush de pendências para o host
-            if (role === 'host') {
+          } else if (isConnected && role === 'host') {
+            // Se conectado e for host, verificar pendências
+            const { hasPendingChanges } = useSyncStore.getState()
+            if (hasPendingChanges) {
               console.log('[Realtime] Host: Flushing pending sync after visibility change')
               useSyncStore.getState().flushPendingSync()
             }
@@ -286,24 +343,16 @@ export function useRealtimeGame() {
     }
 
     const handleOnline = () => {
-      console.log('[Realtime] Network came online, reconnecting...')
-      reconnect()
-    }
-
-    const handleFocus = () => {
-      // Verificação adicional quando a janela ganha foco
-      if (document.visibilityState === 'visible') {
-        const channelState = channelRef.current?.state
-        if (channelState !== 'joined') {
-          console.log('[Realtime] Window focused but not connected, reconnecting...')
-          reconnect()
-        }
+      // Só reconectar se realmente desconectado
+      const channelState = channelRef.current?.state
+      if (channelState !== 'joined' && channelState !== 'joining' && !isReconnectingRef.current) {
+        console.log('[Realtime] Network came online, reconnecting...')
+        reconnect()
       }
     }
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
     window.addEventListener('online', handleOnline)
-    window.addEventListener('focus', handleFocus)
 
     return () => {
       if (visibilityTimeout) {
@@ -311,7 +360,6 @@ export function useRealtimeGame() {
       }
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('online', handleOnline)
-      window.removeEventListener('focus', handleFocus)
     }
   }, [code, role, reconnect])
 
