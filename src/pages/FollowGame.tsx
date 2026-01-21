@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGameStore, useSyncStore } from '../stores'
 import { useRealtimeGame, type EndReason } from '../hooks'
 import { useGameInsights } from '../hooks/useGameInsights'
+import { calculateAccuracy } from '../utils'
 import { PageContainer, Header } from '../components/layout'
 import { SyncBar } from '../components/sync'
 import RoundHeader from '../components/follow/RoundHeader'
@@ -30,7 +31,7 @@ export default function FollowGame() {
   // Estado para mostrar modal de encerramento
   const [showEndModal, setShowEndModal] = useState<EndReason>(null)
 
-  // Hook de insights
+  // Hook de insights (AI)
   const {
     insights,
     isLoading: insightsLoading,
@@ -38,6 +39,14 @@ export default function FollowGame() {
     refresh: refreshInsights,
     canGenerate,
   } = useGameInsights(game)
+
+  // Accuracy calculada localmente (sem AI) - mais econômico
+  const localAccuracy = useMemo(() => {
+    if (!game) return null
+    const finishedRounds = game.rounds.filter(r => r.status === 'finished').length
+    if (finishedRounds < 2) return null // Precisa de pelo menos 2 rodadas
+    return calculateAccuracy(game)
+  }, [game])
 
   // Se não há jogo, redirecionar para home
   useEffect(() => {
@@ -252,13 +261,17 @@ export default function FollowGame() {
                 </div>
               )}
 
-              {/* Insights */}
+              {/* Accuracy calculada localmente (sempre disponível) */}
+              {localAccuracy && (
+                <InsightAccuracy insight={localAccuracy} />
+              )}
+
+              {/* Insights gerados por AI */}
               {insights && (
                 <>
                   <InsightMomentum insights={insights.momentum} />
                   <InsightRace insight={insights.race} />
                   <InsightProfiles profiles={insights.profiles} />
-                  <InsightAccuracy insight={insights.accuracy} />
                   <InsightTrends trends={insights.trends} />
                   <InsightHighlights highlights={insights.highlights} />
                 </>

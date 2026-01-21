@@ -4,9 +4,9 @@ import type { InsightsState, InsightsHistoryEntry, GameInsights } from '../types
 import { generateInsights } from '../services/insightsService'
 
 // Configurações
-const CACHE_TTL_MS = 60000 // 1 minuto de cache
+const CACHE_TTL_MS = 180000 // 3 minutos de cache (reduz chamadas à API)
 const MIN_ROUNDS_FOR_INSIGHTS = 2 // Mínimo de rodadas finalizadas para gerar insights
-const MAX_HISTORY_ENTRIES = 5 // Máximo de entradas no histórico para contexto
+const MAX_HISTORY_ENTRIES = 3 // Máximo de entradas no histórico (reduzido para economizar tokens)
 
 interface UseGameInsightsOptions {
   /** Se deve gerar insights automaticamente quando o jogo muda */

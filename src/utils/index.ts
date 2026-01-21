@@ -48,3 +48,6 @@ export {
   isValidCode,
   formatCodeForDisplay,
 } from './sync'
+
+// Insights
+export { calculateAccuracy } from './calculateAccuracy'

@@ -6,29 +6,28 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
+interface PlayerData {
+  name: string
+  score: number
+  pos: number
+  hits: number
+  total: number
+  hitRate: number
+  streak: number
+  streakType: 'hit' | 'miss' | null
+}
+
 interface GameData {
   id: string
-  players: {
-    id: string
-    name: string
-    position: number
-    totalScore: number
-  }[]
+  players: { id: string; name: string; totalScore: number }[]
   rounds: {
     number: number
     cardCount: number
-    dealerId: string
     status: string
-    players: {
-      playerId: string
-      estimate: number | null
-      wins: number | null
-      score: number | null
-    }[]
+    players: { playerId: string; estimate: number | null; wins: number | null }[]
   }[]
   currentRoundIndex: number
   totalRounds: number
-  direction: string
 }
 
 interface InsightsHistoryEntry {
@@ -38,272 +37,144 @@ interface InsightsHistoryEntry {
   playerNicknames: Record<string, string>
 }
 
-function buildPrompt(gameData: GameData, history: InsightsHistoryEntry[] = []): string {
-  const currentRound = gameData.rounds[gameData.currentRoundIndex]
-  const roundsPlayed = gameData.rounds.filter(r => r.status === 'finished').length
-  const roundsLeft = gameData.totalRounds - roundsPlayed
-  const isFirstInsights = history.length === 0
+function buildCompactData(gameData: GameData): PlayerData[] {
+  const finishedRounds = gameData.rounds.filter(r => r.status === 'finished')
 
-  // Preparar dados resumidos para o prompt
-  const playersSummary = gameData.players.map(p => {
-    const playerRounds = gameData.rounds
-      .filter(r => r.status === 'finished')
-      .map(r => {
-        const rp = r.players.find(rp => rp.playerId === p.id)
-        return {
-          round: r.number,
-          cards: r.cardCount,
-          estimate: rp?.estimate ?? 0,
-          wins: rp?.wins ?? 0,
-          score: rp?.score ?? 0,
-          hit: rp?.estimate === rp?.wins,
-        }
-      })
-
-    const hits = playerRounds.filter(r => r.hit).length
-    const total = playerRounds.length
-    const avgEstimate = total > 0 ? playerRounds.reduce((s, r) => s + r.estimate, 0) / total : 0
-    const avgScore = total > 0 ? playerRounds.reduce((s, r) => s + r.score, 0) / total : 0
-
-    // Detectar sequências
-    let currentStreak = 0
+  const players = gameData.players.map(p => {
+    let hits = 0, total = 0, streak = 0
     let streakType: 'hit' | 'miss' | null = null
-    for (let i = playerRounds.length - 1; i >= 0; i--) {
-      const isHit = playerRounds[i].hit
-      if (streakType === null) {
-        streakType = isHit ? 'hit' : 'miss'
-        currentStreak = 1
-      } else if ((isHit && streakType === 'hit') || (!isHit && streakType === 'miss')) {
-        currentStreak++
-      } else {
-        break
+
+    finishedRounds.forEach((r, i) => {
+      const rp = r.players.find(rp => rp.playerId === p.id)
+      if (rp && rp.estimate !== null && rp.wins !== null) {
+        total++
+        const isHit = rp.estimate === rp.wins
+        if (isHit) hits++
+
+        // Calcular streak (das rodadas mais recentes)
+        if (i === finishedRounds.length - 1) {
+          streakType = isHit ? 'hit' : 'miss'
+          streak = 1
+        } else if (streakType !== null) {
+          if ((isHit && streakType === 'hit') || (!isHit && streakType === 'miss')) {
+            streak++
+          }
+        }
       }
-    }
+    })
 
     return {
       name: p.name,
-      totalScore: p.totalScore,
-      position: 0, // será calculado
-      roundsData: playerRounds,
-      stats: {
-        hits,
-        total,
-        hitRate: total > 0 ? Math.round((hits / total) * 100) : 0,
-        avgEstimate: Math.round(avgEstimate * 10) / 10,
-        avgScore: Math.round(avgScore * 10) / 10,
-        currentStreak,
-        streakType,
-      },
+      score: p.totalScore,
+      pos: 0,
+      hits,
+      total,
+      hitRate: total > 0 ? Math.round((hits / total) * 100) : 0,
+      streak,
+      streakType,
     }
   })
 
-  // Ordenar por pontuação e atribuir posições
-  playersSummary.sort((a, b) => b.totalScore - a.totalScore)
-  playersSummary.forEach((p, i) => (p.position = i + 1))
+  // Ordenar e atribuir posições
+  players.sort((a, b) => b.score - a.score)
+  players.forEach((p, i) => p.pos = i + 1)
 
-  // Construir contexto do histórico
-  let historyContext = ''
-  if (history.length > 0) {
-    // Extrair apelidos já usados (usar os mais recentes)
-    const existingNicknames: Record<string, string> = {}
-    history.forEach(h => {
-      Object.entries(h.playerNicknames || {}).forEach(([name, nickname]) => {
-        existingNicknames[name] = nickname
-      })
-    })
-
-    historyContext = `
-CONTEXTO NARRATIVO (MUITO IMPORTANTE - MANTENHA A CONTINUIDADE!):
-Esta é uma continuação da narrativa. Você já fez análises anteriores desta partida.
-
-APELIDOS JÁ ESTABELECIDOS (USE OS MESMOS!):
-${Object.entries(existingNicknames).map(([name, nick]) => `- ${name}: "${nick}"`).join('\n')}
-
-HISTÓRICO DA NARRATIVA:
-${history.map(h => `
-Rodada ${h.roundNumber}:
-- Resumo: ${h.narrativeSummary}
-- Momentos-chave: ${h.keyMoments.join('; ')}
-`).join('\n')}
-
-REGRAS DE CONTINUIDADE:
-1. MANTENHA os apelidos já criados para cada jogador (não invente novos!)
-2. Referencie eventos passados quando relevante ("como vimos na rodada X...")
-3. Evolua a narrativa: se alguém estava em má fase e melhorou, destaque a virada
-4. Se o líder mudou, comente a "troca de coroa"
-5. Mantenha consistência: não contradiga análises anteriores sem justificativa
-6. Construa arcos narrativos: vilões, heróis, azarões, etc.
-`
-  }
-
-  return `Você é um narrador MUITO divertido e descontraído de uma partida do jogo de cartas "Estimativa".
-${isFirstInsights ? 'Esta é a PRIMEIRA análise da partida - estabeleça os personagens e suas características!' : ''}
-
-REGRAS DO TOM DE VOZ (IMPORTANTE!):
-- Seja zoeiro mas respeitoso, como um grupo de amigos jogando
-- Use emojis com moderação (1-2 por frase)
-- Varie MUITO o estilo das frases - nunca use a mesma estrutura duas vezes
-- Faça referências à cultura pop brasileira quando fizer sentido
-- Seja criativo nos apelidos e comparações
-- Use gírias brasileiras naturalmente (tipo "tá on fire", "mitou", "zerou", etc)
-- Alterne entre análises sérias e zoeiras leves
-${historyContext}
-DADOS DA PARTIDA:
-- Rodada atual: ${currentRound.number} de ${gameData.totalRounds}
-- Rodadas jogadas: ${roundsPlayed}
-- Rodadas restantes: ${roundsLeft}
-- Cartas na rodada atual: ${currentRound.cardCount}
-- Status da rodada: ${currentRound.status}
-
-JOGADORES E ESTATÍSTICAS:
-${JSON.stringify(playersSummary, null, 2)}
-
-GERE UM JSON (apenas o JSON, sem markdown) com EXATAMENTE esta estrutura:
-
-{
-  "narrativeSummary": "resumo de 1 frase do momento atual da partida para contexto futuro",
-  "momentum": [
-    {
-      "playerName": "nome",
-      "type": "on_fire|bad_phase|comeback|consistent|volatile",
-      "message": "frase criativa sobre o momento do jogador"
-    }
-  ],
-  "race": {
-    "summary": "frase empolgante sobre a disputa pelo título",
-    "projections": [
-      {
-        "playerName": "nome",
-        "currentScore": 0,
-        "projectedScore": 0,
-        "position": 1,
-        "message": "análise curta e divertida"
-      }
-    ],
-    "turnoverChance": "análise das chances de virada",
-    "roundsLeft": ${roundsLeft}
-  },
-  "profiles": [
-    // OBRIGATÓRIO: Um perfil para CADA jogador da partida!
-    {
-      "playerName": "nome do jogador",
-      "nickname": "${isFirstInsights ? 'apelido criativo baseado no estilo' : 'MANTENHA O APELIDO DO HISTÓRICO'}",
-      "style": "conservador|agressivo|equilibrado|imprevisivel",
-      "strengths": ["ponto forte 1"],
-      "weaknesses": ["ponto fraco 1"],
-      "funFact": "curiosidade sobre o desempenho"
-    }
-    // ... repita para TODOS os jogadores
-  ],
-  "accuracy": {
-    "byPlayer": [
-      // OBRIGATÓRIO: Dados de assertividade para CADA jogador!
-      {
-        "playerName": "nome do jogador",
-        "overall": 75,
-        "byRange": [
-          {"range": "0", "percentage": 100, "total": 2, "hits": 2},
-          {"range": "1-2", "percentage": 60, "total": 5, "hits": 3},
-          {"range": "3+", "percentage": 33, "total": 3, "hits": 1}
-        ]
-      }
-      // ... repita para TODOS os jogadores
-    ],
-    "tips": ["dica zoeira para melhorar"]
-  },
-  "trends": [
-    {
-      "playerName": "nome",
-      "type": "overestimate|underestimate|calibrated|early_game|late_game",
-      "message": "observação sobre tendência",
-      "value": 0.5
-    }
-  ],
-  "highlights": [
-    {
-      "type": "best_round|worst_round|biggest_comeback|most_consistent|most_volatile|epic_moment",
-      "playerName": "nome",
-      "round": 3,
-      "value": 50,
-      "message": "descrição do momento"
-    }
-  ]
+  return players
 }
 
-IMPORTANTE:
-- Gere dados REAIS baseados nas estatísticas
-- Seja CRIATIVO e varie as frases
-- Use os nomes reais dos jogadores
-- MENSAGENS CURTAS (máx 80 caracteres)
-- Gere apenas 2-3 itens por categoria (momentum, trends, highlights)
-- OBRIGATÓRIO: "profiles" deve ter um perfil para CADA jogador (${playersSummary.length} jogadores)
-- OBRIGATÓRIO: "accuracy.byPlayer" deve ter dados de CADA jogador (${playersSummary.length} jogadores)
-- ${isFirstInsights ? 'Crie apelidos memoráveis para cada jogador' : 'USE OS MESMOS APELIDOS do histórico!'}
-- Retorne APENAS o JSON válido`
+function buildPrompt(gameData: GameData, history: InsightsHistoryEntry[] = []): string {
+  const roundsPlayed = gameData.rounds.filter(r => r.status === 'finished').length
+  const roundsLeft = gameData.totalRounds - roundsPlayed
+  const isFirst = history.length === 0
+  const players = buildCompactData(gameData)
+  const numPlayers = players.length
+
+  // Dados compactos: nome|score|pos|hits/total|hitRate%|streak
+  const playersCompact = players.map(p =>
+    `${p.name}|${p.score}pts|#${p.pos}|${p.hits}/${p.total}|${p.hitRate}%|${p.streak}${p.streakType === 'hit' ? 'W' : 'L'}`
+  ).join('\n')
+
+  // Contexto do histórico (compacto)
+  let historyCtx = ''
+  if (history.length > 0) {
+    const nicks = history.reduce((acc, h) => ({ ...acc, ...h.playerNicknames }), {} as Record<string, string>)
+    const nicksStr = Object.entries(nicks).map(([n, a]) => `${n}="${a}"`).join(', ')
+    const histStr = history.map(h => `R${h.roundNumber}: ${h.narrativeSummary}`).join(' | ')
+
+    historyCtx = `
+APELIDOS: ${nicksStr}
+HISTÓRICO: ${histStr}
+REGRA: Use os mesmos apelidos! Evolua a narrativa.`
+  }
+
+  return `Narrador zoeiro de "Estimativa" (jogo de cartas BR).
+Tom: amigos jogando, gírias BR, emojis moderados, frases curtas (<60 chars).
+${isFirst ? 'PRIMEIRA análise - crie apelidos memoráveis!' : ''}
+${historyCtx}
+
+PARTIDA: Rodada ${roundsPlayed}/${gameData.totalRounds}, ${roundsLeft} restantes
+JOGADORES (nome|score|pos|acertos|taxa|sequência):
+${playersCompact}
+
+Retorne JSON (sem markdown):
+{
+"narrativeSummary":"resumo 1 frase",
+"momentum":[{"playerName":"","type":"on_fire|bad_phase|comeback|consistent|volatile","message":""}],
+"race":{"summary":"","projections":[{"playerName":"","currentScore":0,"projectedScore":0,"position":1,"message":""}],"turnoverChance":"","roundsLeft":${roundsLeft}},
+"profiles":[${players.map(() => '{"playerName":"","nickname":"","style":"conservador|agressivo|equilibrado|imprevisivel","strengths":[""],"weaknesses":[""],"funFact":""}').join(',')}],
+"trends":[{"playerName":"","type":"overestimate|underestimate|calibrated","message":"","value":0}],
+"highlights":[{"type":"best_round|worst_round|comeback|epic_moment","playerName":"","round":0,"value":0,"message":""}]
+}
+
+REGRAS:
+- ${numPlayers} perfis obrigatórios (1 por jogador)
+- 2-3 itens em momentum/trends/highlights
+- Mensagens <60 chars
+- JSON válido apenas`
 }
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
 
   try {
     const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
-    if (!apiKey) {
-      throw new Error('ANTHROPIC_API_KEY not configured')
-    }
+    if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured')
 
     const { gameData, insightsHistory = [] } = await req.json()
-    if (!gameData) {
-      throw new Error('gameData is required')
-    }
-
-    console.log('Generating insights for round', gameData.currentRoundIndex + 1)
-    console.log('History entries:', insightsHistory.length)
+    if (!gameData) throw new Error('gameData is required')
 
     const client = new Anthropic({ apiKey })
-
     const prompt = buildPrompt(gameData, insightsHistory)
+
+    console.log('Prompt length:', prompt.length, 'chars')
 
     const message = await client.messages.create({
       model: 'claude-3-haiku-20240307',
-      max_tokens: 4096,
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
+      max_tokens: 2000, // Reduzido de 4096
+      messages: [{ role: 'user', content: prompt }],
     })
 
-    // Extrair o texto da resposta
     const responseText = message.content[0].type === 'text' ? message.content[0].text : ''
 
-    // Tentar parsear o JSON
     let insights
     try {
-      // Remover possíveis marcadores de código markdown
       let cleanJson = responseText.replace(/```json\n?|\n?```/g, '').trim()
-
-      // Encontrar o início e fim do JSON (primeiro { e último })
       const jsonStart = cleanJson.indexOf('{')
       const jsonEnd = cleanJson.lastIndexOf('}')
 
       if (jsonStart === -1 || jsonEnd === -1 || jsonEnd <= jsonStart) {
-        throw new Error('No valid JSON object found in response')
+        throw new Error('No valid JSON found')
       }
 
       cleanJson = cleanJson.substring(jsonStart, jsonEnd + 1)
-
       insights = JSON.parse(cleanJson)
     } catch (parseError) {
-      console.error('Failed to parse AI response:', responseText.substring(0, 500))
-      console.error('Parse error:', parseError)
-      throw new Error('Failed to parse AI response as JSON')
+      console.error('Parse error:', responseText.substring(0, 300))
+      throw new Error('Failed to parse AI response')
     }
 
-    // Adicionar metadata
     insights.generatedAt = new Date().toISOString()
     insights.roundNumber = gameData.currentRoundIndex + 1
 
@@ -311,13 +182,10 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (error) {
-    console.error('Error generating insights:', error)
+    console.error('Error:', error)
     return new Response(
       JSON.stringify({ error: error.message || 'Failed to generate insights' }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 })
