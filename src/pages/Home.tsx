@@ -5,6 +5,7 @@ import { PageContainer } from '../components/layout'
 import { JoinModal } from '../components/sync'
 import { useGameStore } from '../stores'
 import { useSupabaseStatus } from '../hooks'
+import { version } from '../../package.json'
 
 export default function Home() {
   const navigate = useNavigate()
@@ -90,7 +91,7 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="p-4 text-center text-white/30 text-xs">
-        Estimativa v1.0
+        Estimativa v{version}
       </footer>
 
       {/* Modal para entrar em partida */}
