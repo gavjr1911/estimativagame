@@ -96,7 +96,7 @@ export interface GameInsights {
   momentum: MomentumInsight[]
   race: RaceInsight
   profiles: PlayerProfile[]
-  accuracy: AccuracyInsight
+  accuracy?: AccuracyInsight
   trends: TrendInsight[]
   highlights: HighlightInsight[]
   /** Resumo narrativo para continuidade */

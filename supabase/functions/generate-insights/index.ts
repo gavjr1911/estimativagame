@@ -44,24 +44,27 @@ function buildCompactData(gameData: GameData): PlayerData[] {
     let hits = 0, total = 0, streak = 0
     let streakType: 'hit' | 'miss' | null = null
 
-    finishedRounds.forEach((r, i) => {
+    // Iterar de trás pra frente para calcular streak das rodadas mais recentes
+    for (let i = finishedRounds.length - 1; i >= 0; i--) {
+      const r = finishedRounds[i]
       const rp = r.players.find(rp => rp.playerId === p.id)
       if (rp && rp.estimate !== null && rp.wins !== null) {
         total++
         const isHit = rp.estimate === rp.wins
         if (isHit) hits++
 
-        // Calcular streak (das rodadas mais recentes)
-        if (i === finishedRounds.length - 1) {
+        if (streakType === null) {
+          // Primeira rodada (mais recente): inicializa streak
           streakType = isHit ? 'hit' : 'miss'
           streak = 1
-        } else if (streakType !== null) {
-          if ((isHit && streakType === 'hit') || (!isHit && streakType === 'miss')) {
-            streak++
-          }
+        } else if ((isHit && streakType === 'hit') || (!isHit && streakType === 'miss')) {
+          // Continua a mesma streak
+          streak++
         }
+        // Se a streak quebrou, não precisa continuar contando streak
+        // (mas continua contando hits/total)
       }
-    })
+    }
 
     return {
       name: p.name,
