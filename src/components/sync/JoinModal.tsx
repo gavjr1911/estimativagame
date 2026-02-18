@@ -13,7 +13,7 @@ interface JoinModalProps {
 export default function JoinModal({ isOpen, onClose }: JoinModalProps) {
   const navigate = useNavigate()
   const { error, status, joinGame, setError } = useSyncStore()
-  const { isConfigured, isOnline } = useSupabaseStatus()
+  const { isConfigured, isOnline, isReachable } = useSupabaseStatus()
   const [code, setCode] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
@@ -48,8 +48,15 @@ export default function JoinModal({ isOpen, onClose }: JoinModalProps) {
     }
   }
 
-  // Se não está configurado ou offline
-  if (!isConfigured || !isOnline) {
+  // Se não está configurado, offline ou serviço inacessível
+  if (!isConfigured || !isOnline || isReachable === false) {
+    const getMessage = () => {
+      if (!isOnline) return { title: 'Sem conexão com a internet', detail: 'Conecte-se à internet para entrar em uma partida.' }
+      if (!isConfigured) return { title: 'Modo online não disponível', detail: 'O modo multi-dispositivo não está configurado.' }
+      return { title: 'Serviço temporariamente indisponível', detail: 'O servidor está fora do ar. Tente novamente em alguns minutos.' }
+    }
+    const msg = getMessage()
+
     return (
       <Modal isOpen={isOpen} onClose={onClose} title="Entrar em Partida">
         <div className="text-center py-4">
@@ -59,12 +66,10 @@ export default function JoinModal({ isOpen, onClose }: JoinModalProps) {
             </svg>
           </div>
           <p className="text-white/70 mb-2">
-            {!isOnline ? 'Sem conexão com a internet' : 'Modo online não disponível'}
+            {msg.title}
           </p>
           <p className="text-sm text-white/50">
-            {!isOnline
-              ? 'Conecte-se à internet para entrar em uma partida.'
-              : 'O modo multi-dispositivo não está configurado.'}
+            {msg.detail}
           </p>
         </div>
         <Button variant="secondary" fullWidth onClick={onClose} className="mt-4">

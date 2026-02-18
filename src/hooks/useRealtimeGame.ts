@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { useSyncStore, useGameStore } from '../stores'
 import type { Game } from '../types'
@@ -372,11 +372,35 @@ export function useRealtimeGame() {
 }
 
 /**
- * Hook para verificar se o Supabase está configurado
+ * Hook para verificar se o Supabase está configurado e acessível
  */
 export function useSupabaseStatus() {
-  return {
+  const [isReachable, setIsReachable] = useState<boolean | null>(null)
+  const checkedRef = useRef(false)
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase || checkedRef.current) return
+    checkedRef.current = true
+
+    const checkReachability = async () => {
+      try {
+        const { error } = await supabase!
+          .from('shared_games')
+          .select('id', { count: 'exact', head: true })
+          .limit(1)
+
+        setIsReachable(!error)
+      } catch {
+        setIsReachable(false)
+      }
+    }
+
+    checkReachability()
+  }, [])
+
+  return useMemo(() => ({
     isConfigured: isSupabaseConfigured,
     isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
-  }
+    isReachable,
+  }), [isReachable])
 }

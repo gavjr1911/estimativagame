@@ -12,7 +12,7 @@ interface ShareModalProps {
 export default function ShareModal({ isOpen, onClose }: ShareModalProps) {
   const { game } = useGameStore()
   const { role, status, code, error, viewerCount, shareGame, leaveGame } = useSyncStore()
-  const { isConfigured, isOnline } = useSupabaseStatus()
+  const { isConfigured, isOnline, isReachable } = useSupabaseStatus()
   const [isLoading, setIsLoading] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -53,8 +53,15 @@ export default function ShareModal({ isOpen, onClose }: ShareModalProps) {
     }
   }
 
-  // Se não está configurado ou offline
-  if (!isConfigured || !isOnline) {
+  // Se não está configurado, offline ou serviço inacessível
+  if (!isConfigured || !isOnline || isReachable === false) {
+    const getMessage = () => {
+      if (!isOnline) return { title: 'Sem conexão com a internet', detail: 'Conecte-se à internet para compartilhar a partida.' }
+      if (!isConfigured) return { title: 'Compartilhamento não disponível', detail: 'O modo multi-dispositivo não está configurado.' }
+      return { title: 'Serviço temporariamente indisponível', detail: 'O servidor está fora do ar. Tente novamente em alguns minutos.' }
+    }
+    const msg = getMessage()
+
     return (
       <Modal isOpen={isOpen} onClose={onClose} title="Compartilhar Partida">
         <div className="text-center py-4">
@@ -64,12 +71,10 @@ export default function ShareModal({ isOpen, onClose }: ShareModalProps) {
             </svg>
           </div>
           <p className="text-white/70 mb-2">
-            {!isOnline ? 'Sem conexão com a internet' : 'Compartilhamento não disponível'}
+            {msg.title}
           </p>
           <p className="text-sm text-white/50">
-            {!isOnline
-              ? 'Conecte-se à internet para compartilhar a partida.'
-              : 'O modo multi-dispositivo não está configurado.'}
+            {msg.detail}
           </p>
         </div>
         <Button variant="secondary" fullWidth onClick={onClose} className="mt-4">
